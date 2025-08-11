@@ -74,3 +74,31 @@ func DeleteMaterial(c *fiber.Ctx) error {
 	}
 	return c.JSON(fiber.Map{"message": "Material deleted successfully"})
 }
+
+// GetMaterialById 获取单个物料信息
+func GetMaterialById(c *fiber.Ctx) error {
+	id := c.Params("id")
+	var material models.Material
+	if err := database.DB.First(&material, id).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Material not found"})
+	}
+	return c.JSON(material)
+}
+
+// SearchMaterials 按名称或类别搜索物料
+func SearchMaterials(c *fiber.Ctx) error {
+	name := c.Query("name")
+	category := c.Query("category")
+	var materials []models.Material
+	query := database.DB
+	if name != "" {
+		query = query.Where("name LIKE ?", "%"+name+"%")
+	}
+	if category != "" {
+		query = query.Where("category LIKE ?", "%"+category+"%")
+	}
+	if err := query.Find(&materials).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to search materials"})
+	}
+	return c.JSON(materials)
+}

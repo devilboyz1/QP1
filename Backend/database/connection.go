@@ -25,6 +25,6 @@ func ConnectDB() (*gorm.DB, error) {
 
 	DB = db
 
-	db.AutoMigrate(&models.User{}, &models.Material{})
+	db.AutoMigrate(&models.User{}, &models.Material{}, &models.Component{}, &models.ComponentMaterial{})
 	return db, nil
 }
