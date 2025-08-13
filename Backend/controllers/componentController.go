@@ -3,6 +3,7 @@ package controllers
 import (
 	"qp1/database"
 	"qp1/models"
+	"strconv"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -93,13 +94,36 @@ func CreateComponent(c *fiber.Ctx) error {
 	return c.JSON(completeComponent)
 }
 
-// ListComponents retrieves all components with their materials
+// ListComponents retrieves all components with their materials (with pagination)
 func ListComponents(c *fiber.Ctx) error {
+	page, _ := strconv.Atoi(c.Query("page", "1"))
+	pageSize, _ := strconv.Atoi(c.Query("pageSize", "10"))
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 10
+	}
+
+	var total int64
 	var components []models.Component
-	if err := database.DB.Preload("Materials.Material").Find(&components).Error; err != nil {
+
+	database.DB.Model(&models.Component{}).Count(&total)
+	if err := database.DB.
+		Preload("Materials.Material").
+		Limit(pageSize).
+		Offset((page - 1) * pageSize).
+		Find(&components).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch components"})
 	}
-	return c.JSON(components)
+
+	return c.JSON(fiber.Map{
+		"data":       components,
+		"total":      total,
+		"page":       page,
+		"pageSize":   pageSize,
+		"totalPages": (total + int64(pageSize) - 1) / int64(pageSize),
+	})
 }
 
 // GetComponent retrieves a specific component with its materials

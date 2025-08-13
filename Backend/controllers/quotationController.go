@@ -311,18 +311,38 @@ func UpdateQuotation(c *fiber.Ctx) error {
 	return c.JSON(quotation)
 }
 
-// ListAllQuotations allows admin to view all quotations
+// ListAllQuotations allows admin to view all quotations with pagination
 func ListAllQuotations(c *fiber.Ctx) error {
+	page, _ := strconv.Atoi(c.Query("page", "1"))
+	pageSize, _ := strconv.Atoi(c.Query("pageSize", "10"))
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 10
+	}
+
+	var total int64
 	var quotations []models.Quotation
+
+	database.DB.Model(&models.Quotation{}).Count(&total)
 	if err := database.DB.
 		Preload("User").
 		Preload("Items.Component").
 		Preload("Materials.Material").
 		Order("created_at DESC").
+		Limit(pageSize).
+		Offset((page - 1) * pageSize).
 		Find(&quotations).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch quotations"})
 	}
-	return c.JSON(quotations)
+	return c.JSON(fiber.Map{
+		"data":       quotations,
+		"total":      total,
+		"page":       page,
+		"pageSize":   pageSize,
+		"totalPages": (total + int64(pageSize) - 1) / int64(pageSize),
+	})
 }
 
 // DuplicateQuotation allows a user to copy an existing quotation
@@ -437,14 +457,25 @@ func GenerateQuotationPDF(c *fiber.Ctx) error {
 	return c.SendStream(&buf)
 }
 
-// SearchQuotations allows searching quotations by client, date, or status
+// SearchQuotations allows searching quotations by client, date, or status with pagination
 func SearchQuotations(c *fiber.Ctx) error {
 	client := c.Query("client")
 	status := c.Query("status")
 	date := c.Query("date") // expected format: YYYY-MM-DD
 
+	page, _ := strconv.Atoi(c.Query("page", "1"))
+	pageSize, _ := strconv.Atoi(c.Query("pageSize", "10"))
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 10
+	}
+	offset := (page - 1) * pageSize
+
+	var total int64
 	var quotations []models.Quotation
-	query := database.DB.Preload("User")
+	query := database.DB.Model(&models.Quotation{}).Preload("User")
 
 	if client != "" {
 		query = query.Joins("JOIN users ON users.id = quotations.user_id").Where("users.name LIKE ?", "%"+client+"%")
@@ -456,10 +487,24 @@ func SearchQuotations(c *fiber.Ctx) error {
 		query = query.Where("DATE(quotations.created_at) = ?", date)
 	}
 
-	if err := query.Find(&quotations).Error; err != nil {
+	// Count total
+	query.Count(&total)
+
+	// Fetch paginated
+	if err := query.
+		Order("created_at DESC").
+		Limit(pageSize).
+		Offset(offset).
+		Find(&quotations).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to search quotations"})
 	}
-	return c.JSON(quotations)
+	return c.JSON(fiber.Map{
+		"data":       quotations,
+		"total":      total,
+		"page":       page,
+		"pageSize":   pageSize,
+		"totalPages": (total + int64(pageSize) - 1) / int64(pageSize),
+	})
 }
 
 // GenerateSalesReport generates a sales report for all quotations

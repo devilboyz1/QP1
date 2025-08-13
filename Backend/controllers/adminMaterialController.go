@@ -3,6 +3,7 @@ package controllers
 import (
 	"qp1/database"
 	"qp1/models"
+	"strconv"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -32,6 +33,37 @@ func ListMaterials(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch materials"})
 	}
 	return c.JSON(materials)
+}
+
+// ListAllMaterials 查询所有物料（带分页）
+func ListAllMaterials(c *fiber.Ctx) error {
+	page, _ := strconv.Atoi(c.Query("page", "1"))
+	pageSize, _ := strconv.Atoi(c.Query("pageSize", "10"))
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 10
+	}
+
+	var total int64
+	var materials []models.Material
+
+	database.DB.Model(&models.Material{}).Count(&total)
+	if err := database.DB.
+		Limit(pageSize).
+		Offset((page - 1) * pageSize).
+		Find(&materials).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch materials"})
+	}
+
+	return c.JSON(fiber.Map{
+		"data":       materials,
+		"total":      total,
+		"page":       page,
+		"pageSize":   pageSize,
+		"totalPages": (total + int64(pageSize) - 1) / int64(pageSize),
+	})
 }
 
 // UpdateMaterial 修改物料
