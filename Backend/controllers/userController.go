@@ -60,7 +60,7 @@ func UpdateUserPassword(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to hash new password"})
 	}
 
-	user.Password = string(hashedPassword)
+	user.Password = hashedPassword // hashedPassword is already []byte
 	if err := database.DB.Save(user).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update password"})
 	}
