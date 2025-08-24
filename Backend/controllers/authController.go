@@ -115,18 +115,19 @@ func Login(c *fiber.Ctx) error {
 	fmt.Println("Setting cookie")
 
 	// Set JWT token in cookie
+	// In the Login function, around line 120-130
 	cookie := fiber.Cookie{
 		Name:     "jwt",
 		Value:    token,
-		Expires:  time.Now().Add(time.Hour * 24), // Expires in 24 hours
+		Expires:  time.Now().Add(time.Hour * 24),
 		HTTPOnly: true,
-		Secure:   true,
+		Secure:   false, // Change this from true to false for local development
 	}
 	c.Cookie(&cookie)
 
 	fmt.Println("Authentication successful, returning")
 	// Authentication successful, return success response
-	return c.Status(fiber.StatusAccepted).JSON(fiber.Map{
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"message": "Login successful",
 	})
 }
@@ -144,6 +145,7 @@ func User(c *fiber.Ctx) error {
 
 	// Handle token parsing errors
 	if err != nil {
+		fmt.Println("Token parsing error:", err)
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "Unauthorized",
 		})
@@ -152,6 +154,7 @@ func User(c *fiber.Ctx) error {
 	// Extract claims from token
 	claims, ok := token.Claims.(*jwt.MapClaims)
 	if !ok {
+		fmt.Println("Failed to parse claims")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to parse claims",
 		})
@@ -162,8 +165,15 @@ func User(c *fiber.Ctx) error {
 	user := models.User{ID: uint(id)}
 
 	// Query user from database using ID
-	database.DB.Where("id =?", id).First(&user)
-	fmt.Println("user", c.JSON(user))
+	result := database.DB.Where("id = ?", id).First(&user)
+	if result.Error != nil {
+		fmt.Println("Database error:", result.Error)
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "User not found",
+		})
+	}
+	
+	fmt.Println("User found:", user.Name, "Email:", user.Email) // Fixed logging
 
 	// Return user details as JSON response
 	return c.JSON(fiber.Map{
