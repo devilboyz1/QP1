@@ -15,24 +15,59 @@ import {
   Tooltip,
   Container,
   CircularProgress,
-  Alert
+  Alert,
+  TextField,
+  InputAdornment,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Checkbox,
+  Menu,
+  ListItemIcon,
+  ListItemText,
+  Divider,
+  Grid,
+  Card,
+  CardContent
 } from '@mui/material';
 import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
   Visibility as ViewIcon,
-  GetApp as DownloadIcon
+  GetApp as DownloadIcon,
+  Search as SearchIcon,
+  FilterList as FilterIcon,
+  ArrowUpward as ArrowUpwardIcon,
+  ArrowDownward as ArrowDownwardIcon,
+  MoreVert as MoreVertIcon,
+  FileDownload as FileDownloadIcon,
+  DeleteSweep as DeleteSweepIcon,
+  Person as PersonIcon,
+  Business as BusinessIcon,
+  CheckCircle as CheckCircleIcon,
+  Cancel as CancelIcon,
+  Description as DraftIcon,
+  Send as SendIcon,
+  DateRange as DateRangeIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 
 const QuotationsPage = () => {
   const [quotations, setQuotations] = useState([]);
+  const [filteredQuotations, setFilteredQuotations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [sortConfig, setSortConfig] = useState({ key: 'created_at', direction: 'desc' });
+  const [selectedQuotations, setSelectedQuotations] = useState([]);
+  const [bulkMenuAnchor, setBulkMenuAnchor] = useState(null);
+  const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const navigate = useNavigate();
 
-  // Sample data for demonstration (replace with actual API call)
+  // Sample data with created_by field
   const sampleQuotations = [
     {
       id: 1,
@@ -42,7 +77,8 @@ const QuotationsPage = () => {
       total_cost: 15750.00,
       status: 'draft',
       created_at: '2024-01-15T10:30:00Z',
-      updated_at: '2024-01-15T10:30:00Z'
+      updated_at: '2024-01-15T10:30:00Z',
+      created_by: 'John Smith'
     },
     {
       id: 2,
@@ -52,7 +88,8 @@ const QuotationsPage = () => {
       total_cost: 28500.00,
       status: 'issued',
       created_at: '2024-01-14T14:20:00Z',
-      updated_at: '2024-01-16T09:15:00Z'
+      updated_at: '2024-01-16T09:15:00Z',
+      created_by: 'Sarah Johnson'
     },
     {
       id: 3,
@@ -62,7 +99,8 @@ const QuotationsPage = () => {
       total_cost: 12300.00,
       status: 'accepted',
       created_at: '2024-01-12T11:45:00Z',
-      updated_at: '2024-01-18T16:30:00Z'
+      updated_at: '2024-01-18T16:30:00Z',
+      created_by: 'Mike Davis'
     },
     {
       id: 4,
@@ -72,7 +110,8 @@ const QuotationsPage = () => {
       total_cost: 8750.00,
       status: 'rejected',
       created_at: '2024-01-10T09:00:00Z',
-      updated_at: '2024-01-17T13:20:00Z'
+      updated_at: '2024-01-17T13:20:00Z',
+      created_by: 'Emily Wilson'
     },
     {
       id: 5,
@@ -82,22 +121,15 @@ const QuotationsPage = () => {
       total_cost: 45200.00,
       status: 'draft',
       created_at: '2024-01-20T08:15:00Z',
-      updated_at: '2024-01-20T08:15:00Z'
+      updated_at: '2024-01-20T08:15:00Z',
+      created_by: 'John Smith'
     }
   ];
 
   useEffect(() => {
-    // Simulate API call
     const fetchQuotations = async () => {
       try {
         setLoading(true);
-        // TODO: Replace with actual API call
-        // const response = await fetch('/api/quotations', {
-        //   credentials: 'include'
-        // });
-        // const data = await response.json();
-        
-        // Simulate network delay
         await new Promise(resolve => setTimeout(resolve, 1000));
         setQuotations(sampleQuotations);
         setError(null);
@@ -112,19 +144,102 @@ const QuotationsPage = () => {
     fetchQuotations();
   }, []);
 
-  const getStatusColor = (status) => {
-    switch (status.toLowerCase()) {
-      case 'draft':
-        return 'default';
-      case 'issued':
-        return 'primary';
-      case 'accepted':
-        return 'success';
-      case 'rejected':
-        return 'error';
-      default:
-        return 'default';
+  // Filter and sort quotations
+  useEffect(() => {
+    let filtered = [...quotations];
+
+    // Apply search filter
+    if (searchTerm) {
+      filtered = filtered.filter(q => 
+        q.quotation_no.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        q.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        q.description.toLowerCase().includes(searchTerm.toLowerCase())
+      );
     }
+
+    // Apply status filter
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(q => q.status === statusFilter);
+    }
+
+    // Apply date range filter
+    if (dateRange.start || dateRange.end) {
+      filtered = filtered.filter(q => {
+        const createdDate = new Date(q.created_at);
+        const start = dateRange.start ? new Date(dateRange.start) : null;
+        const end = dateRange.end ? new Date(dateRange.end) : null;
+        
+        if (start && end) {
+          return createdDate >= start && createdDate <= end;
+        } else if (start) {
+          return createdDate >= start;
+        } else if (end) {
+          return createdDate <= end;
+        }
+        return true;
+      });
+    }
+
+    // Apply sorting
+    filtered.sort((a, b) => {
+      let aValue = a[sortConfig.key];
+      let bValue = b[sortConfig.key];
+
+      if (sortConfig.key === 'total_cost') {
+        aValue = parseFloat(aValue);
+        bValue = parseFloat(bValue);
+      } else if (sortConfig.key === 'created_at') {
+        aValue = new Date(aValue);
+        bValue = new Date(bValue);
+      } else if (typeof aValue === 'string') {
+        aValue = aValue.toLowerCase();
+        bValue = bValue.toLowerCase();
+      }
+
+      if (aValue < bValue) {
+        return sortConfig.direction === 'asc' ? -1 : 1;
+      }
+      if (aValue > bValue) {
+        return sortConfig.direction === 'asc' ? 1 : -1;
+      }
+      return 0;
+    });
+
+    setFilteredQuotations(filtered);
+  }, [quotations, searchTerm, statusFilter, sortConfig, dateRange]);
+
+  const handleSort = (key) => {
+    setSortConfig(prev => ({
+      key,
+      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
+    }));
+  };
+
+  const handleSelectAll = (event) => {
+    if (event.target.checked) {
+      setSelectedQuotations(filteredQuotations.map(q => q.id));
+    } else {
+      setSelectedQuotations([]);
+    }
+  };
+
+  const handleSelectQuotation = (quotationId) => {
+    setSelectedQuotations(prev => 
+      prev.includes(quotationId)
+        ? prev.filter(id => id !== quotationId)
+        : [...prev, quotationId]
+    );
+  };
+
+  const handleBulkDelete = () => {
+    setQuotations(prev => prev.filter(q => !selectedQuotations.includes(q.id)));
+    setSelectedQuotations([]);
+    setBulkMenuAnchor(null);
+  };
+
+  const handleBulkExport = () => {
+    console.log('Exporting quotations:', selectedQuotations);
+    setBulkMenuAnchor(null);
   };
 
   const formatCurrency = (amount) => {
@@ -142,35 +257,92 @@ const QuotationsPage = () => {
     });
   };
 
-  const handleNewQuotation = () => {
-    // TODO: Navigate to new quotation form
-    console.log('Navigate to new quotation form');
-    navigate('/quotations/new');
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'draft': return 'default';
+      case 'issued': return 'info';
+      case 'accepted': return 'success';
+      case 'rejected': return 'error';
+      default: return 'default';
+    }
   };
 
-  const handleEdit = (quotationId) => {
-    console.log('Edit quotation:', quotationId);
-    // TODO: Navigate to edit form
-    // navigate(`/quotations/${quotationId}/edit`);
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case 'draft': return <DraftIcon fontSize="small" />;
+      case 'issued': return <SendIcon fontSize="small" />;
+      case 'accepted': return <CheckCircleIcon fontSize="small" />;
+      case 'rejected': return <CancelIcon fontSize="small" />;
+      default: return null;
+    }
+  };
+
+  const getInitials = (name) => {
+    return name.split(' ').map(n => n[0]).join('').toUpperCase();
+  };
+
+  const handleNewQuotation = () => {
+    navigate('/quotations/new');
   };
 
   const handleView = (quotationId) => {
     console.log('View quotation:', quotationId);
-    // TODO: Navigate to view page
-    // navigate(`/quotations/${quotationId}`);
+  };
+
+  const handleEdit = (quotationId) => {
+    navigate(`/quotations/edit/${quotationId}`);
   };
 
   const handleDelete = (quotationId) => {
-    console.log('Delete quotation:', quotationId);
-    // TODO: Show confirmation dialog and delete
-    if (window.confirm('Are you sure you want to delete this quotation?')) {
-      setQuotations(prev => prev.filter(q => q.id !== quotationId));
-    }
+    setQuotations(prev => prev.filter(q => q.id !== quotationId));
   };
 
   const handleDownload = (quotationId) => {
     console.log('Download quotation PDF:', quotationId);
-    // TODO: Download PDF
+  };
+
+  const SortableTableCell = ({ children, sortKey, align = 'left', ...props }) => {
+    const isActive = sortConfig.key === sortKey;
+    const direction = isActive ? sortConfig.direction : 'asc';
+
+    return (
+      <TableCell
+        {...props}
+        align={align}
+        sx={{
+          fontWeight: 'bold',
+          fontSize: '0.95rem',
+          cursor: sortKey ? 'pointer' : 'default',
+          userSelect: 'none',
+          '&:hover': sortKey ? { backgroundColor: 'grey.100' } : {},
+          ...props.sx
+        }}
+        onClick={sortKey ? () => handleSort(sortKey) : undefined}
+      >
+        <Box display="flex" alignItems="center" gap={0.5}>
+          {children}
+          {sortKey && (
+            <Box display="flex" flexDirection="column" ml={0.5}>
+              <ArrowUpwardIcon 
+                fontSize="small" 
+                sx={{ 
+                  fontSize: '12px',
+                  color: isActive && direction === 'asc' ? 'primary.main' : 'grey.400'
+                }} 
+              />
+              <ArrowDownwardIcon 
+                fontSize="small" 
+                sx={{ 
+                  fontSize: '12px',
+                  marginTop: '-2px',
+                  color: isActive && direction === 'desc' ? 'primary.main' : 'grey.400'
+                }} 
+              />
+            </Box>
+          )}
+        </Box>
+      </TableCell>
+    );
   };
 
   if (loading) {
@@ -193,15 +365,8 @@ const QuotationsPage = () => {
 
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
-      {/* Header Section with Primary Action Button */}
-      <Box 
-        display="flex" 
-        justifyContent="space-between" 
-        alignItems="center" 
-        mb={3}
-        flexWrap="wrap"
-        gap={2}
-      >
+      {/* Header Section */}
+      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
         <Typography variant="h4" component="h1" fontWeight="bold">
           Quotations
         </Typography>
@@ -230,7 +395,101 @@ const QuotationsPage = () => {
         </Button>
       </Box>
 
-      {/* Quotations Table - Increased width */}
+      {/* Filters and Search */}
+      <Card sx={{ mb: 3, p: 2 }}>
+        <Grid container spacing={2} alignItems="center">
+          <Grid item xs={12} md={4}>
+            <TextField
+              fullWidth
+              placeholder="Search quotations..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon color="action" />
+                  </InputAdornment>
+                )
+              }}
+              size="small"
+            />
+          </Grid>
+          <Grid item xs={12} md={2}>
+            <FormControl fullWidth size="small">
+              <InputLabel>Status</InputLabel>
+              <Select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                label="Status"
+              >
+                <MenuItem value="all">All</MenuItem>
+                <MenuItem value="draft">Draft</MenuItem>
+                <MenuItem value="issued">Issued</MenuItem>
+                <MenuItem value="accepted">Accepted</MenuItem>
+                <MenuItem value="rejected">Rejected</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+          <Grid item xs={12} md={2}>
+            <TextField
+              fullWidth
+              label="Start Date"
+              type="date"
+              value={dateRange.start}
+              onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
+              InputLabelProps={{ shrink: true }}
+              size="small"
+            />
+          </Grid>
+          <Grid item xs={12} md={2}>
+            <TextField
+              fullWidth
+              label="End Date"
+              type="date"
+              value={dateRange.end}
+              onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
+              InputLabelProps={{ shrink: true }}
+              size="small"
+            />
+          </Grid>
+          <Grid item xs={12} md={2}>
+            {selectedQuotations.length > 0 && (
+              <Button
+                variant="outlined"
+                startIcon={<MoreVertIcon />}
+                onClick={(e) => setBulkMenuAnchor(e.currentTarget)}
+                fullWidth
+                size="small"
+              >
+                Actions ({selectedQuotations.length})
+              </Button>
+            )}
+          </Grid>
+        </Grid>
+      </Card>
+
+      {/* Bulk Actions Menu */}
+      <Menu
+        anchorEl={bulkMenuAnchor}
+        open={Boolean(bulkMenuAnchor)}
+        onClose={() => setBulkMenuAnchor(null)}
+      >
+        <MenuItem onClick={handleBulkExport}>
+          <ListItemIcon>
+            <FileDownloadIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Export Selected</ListItemText>
+        </MenuItem>
+        <Divider />
+        <MenuItem onClick={handleBulkDelete} sx={{ color: 'error.main' }}>
+          <ListItemIcon>
+            <DeleteSweepIcon fontSize="small" color="error" />
+          </ListItemIcon>
+          <ListItemText>Delete Selected</ListItemText>
+        </MenuItem>
+      </Menu>
+
+      {/* Quotations Table */}
       <TableContainer 
         component={Paper} 
         sx={{ 
@@ -240,19 +499,41 @@ const QuotationsPage = () => {
           width: '100%'
         }}
       >
-        <Table sx={{ minWidth: 900 }} aria-label="quotations table">
+        <Table sx={{ minWidth: 1000 }} aria-label="quotations table">
           <TableHead>
             <TableRow sx={{ backgroundColor: 'grey.50' }}>
-              <TableCell sx={{ fontWeight: 'bold', fontSize: '0.95rem', minWidth: 140 }}>Quotation No.</TableCell>
-              <TableCell sx={{ fontWeight: 'bold', fontSize: '0.95rem', minWidth: 250 }}>Title</TableCell>
-              <TableCell sx={{ fontWeight: 'bold', fontSize: '0.95rem', minWidth: 120 }}>Total Cost</TableCell>
-              <TableCell sx={{ fontWeight: 'bold', fontSize: '0.95rem', minWidth: 100 }}>Status</TableCell>
-              <TableCell sx={{ fontWeight: 'bold', fontSize: '0.95rem', minWidth: 100 }}>Created</TableCell>
-              <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: '0.95rem', minWidth: 180 }}>Actions</TableCell>
+              <TableCell padding="checkbox">
+                <Checkbox
+                  indeterminate={selectedQuotations.length > 0 && selectedQuotations.length < filteredQuotations.length}
+                  checked={filteredQuotations.length > 0 && selectedQuotations.length === filteredQuotations.length}
+                  onChange={handleSelectAll}
+                />
+              </TableCell>
+              <SortableTableCell sortKey="quotation_no" sx={{ minWidth: 140 }}>
+                Quotation No.
+              </SortableTableCell>
+              <SortableTableCell sortKey="title" sx={{ minWidth: 250 }}>
+                Title
+              </SortableTableCell>
+              <SortableTableCell sortKey="total_cost" sx={{ minWidth: 120 }}>
+                Total Cost
+              </SortableTableCell>
+              <SortableTableCell sortKey="status" sx={{ minWidth: 100 }}>
+                Status
+              </SortableTableCell>
+              <SortableTableCell sortKey="created_at" sx={{ minWidth: 100 }}>
+                Created
+              </SortableTableCell>
+              <SortableTableCell sortKey="created_by" sx={{ minWidth: 120 }}>
+                Created By
+              </SortableTableCell>
+              <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: '0.95rem', minWidth: 180 }}>
+                Actions
+              </TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {quotations.map((quotation) => (
+            {filteredQuotations.map((quotation, index) => (
               <TableRow 
                 key={quotation.id}
                 sx={{ 
@@ -260,9 +541,18 @@ const QuotationsPage = () => {
                     backgroundColor: 'grey.50',
                     cursor: 'pointer'
                   },
+                  '&:nth-of-type(even)': {
+                    backgroundColor: 'grey.25'
+                  },
                   '&:last-child td, &:last-child th': { border: 0 }
                 }}
               >
+                <TableCell padding="checkbox">
+                  <Checkbox
+                    checked={selectedQuotations.includes(quotation.id)}
+                    onChange={() => handleSelectQuotation(quotation.id)}
+                  />
+                </TableCell>
                 <TableCell component="th" scope="row" sx={{ fontWeight: 500 }}>
                   {quotation.quotation_no}
                 </TableCell>
@@ -281,17 +571,45 @@ const QuotationsPage = () => {
                 </TableCell>
                 <TableCell>
                   <Chip
+                    icon={getStatusIcon(quotation.status)}
                     label={quotation.status.charAt(0).toUpperCase() + quotation.status.slice(1)}
                     color={getStatusColor(quotation.status)}
                     size="small"
-                    sx={{ fontWeight: 500 }}
+                    sx={{ 
+                      fontWeight: 500,
+                      '& .MuiChip-icon': {
+                        fontSize: '16px'
+                      }
+                    }}
                   />
                 </TableCell>
                 <TableCell sx={{ color: 'text.secondary' }}>
                   {formatDate(quotation.created_at)}
                 </TableCell>
+                <TableCell>
+                  <Box display="flex" alignItems="center" gap={1}>
+                    <Box
+                      sx={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: '50%',
+                        backgroundColor: 'primary.main',
+                        color: 'white',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '0.75rem',
+                        fontWeight: 'bold'
+                      }}
+                    >
+                      {getInitials(quotation.created_by)}
+                    </Box>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                      {quotation.created_by}
+                    </Typography>
+                  </Box>
+                </TableCell>
                 <TableCell align="center">
-                  {/* Improved action buttons alignment */}
                   <Box 
                     display="flex" 
                     gap={0.5} 
@@ -320,8 +638,8 @@ const QuotationsPage = () => {
                           size="small"
                           onClick={() => handleEdit(quotation.id)}
                           sx={{ 
-                            color: 'warning.main',
-                            '&:hover': { backgroundColor: 'warning.50' },
+                            color: 'info.main',
+                            '&:hover': { backgroundColor: 'info.50' },
                             width: 32,
                             height: 32
                           }}
@@ -336,8 +654,8 @@ const QuotationsPage = () => {
                         size="small"
                         onClick={() => handleDownload(quotation.id)}
                         sx={{ 
-                          color: 'info.main',
-                          '&:hover': { backgroundColor: 'info.50' },
+                          color: 'success.main',
+                          '&:hover': { backgroundColor: 'success.50' },
                           width: 32,
                           height: 32
                         }}
@@ -371,7 +689,7 @@ const QuotationsPage = () => {
       </TableContainer>
 
       {/* Empty State */}
-      {quotations.length === 0 && (
+      {filteredQuotations.length === 0 && !loading && (
         <Box 
           display="flex" 
           flexDirection="column" 
@@ -381,10 +699,16 @@ const QuotationsPage = () => {
           textAlign="center"
         >
           <Typography variant="h6" color="text.secondary" gutterBottom>
-            No quotations found
+            {searchTerm || statusFilter !== 'all' || dateRange.start || dateRange.end 
+              ? 'No quotations match your filters' 
+              : 'No quotations found'
+            }
           </Typography>
           <Typography variant="body2" color="text.secondary" mb={3}>
-            Get started by creating your first quotation
+            {searchTerm || statusFilter !== 'all' || dateRange.start || dateRange.end
+              ? 'Try adjusting your search criteria'
+              : 'Get started by creating your first quotation'
+            }
           </Typography>
           <Button
             variant="contained"

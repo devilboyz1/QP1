@@ -32,7 +32,12 @@ import {
   Tab,
   Alert,
   FormHelperText,
-  Snackbar
+  Snackbar,
+  Stack,
+  Fade,
+  LinearProgress,
+  Tooltip,
+  Badge
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -46,7 +51,13 @@ import {
   Send as SendIcon,
   ArrowBack as ArrowBackIcon,
   Calculate as CalculateIcon,
-  Warning as WarningIcon
+  Warning as WarningIcon,
+  Receipt as ReceiptIcon,
+  Assignment as AssignmentIcon,
+  Inventory as InventoryIcon,
+  Info as InfoIcon,
+  CheckCircle as CheckCircleIcon,
+  Error as ErrorIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 
@@ -56,6 +67,9 @@ const CreateQuotationPage = () => {
   const [validationErrors, setValidationErrors] = useState({});
   const [autoSaveStatus, setAutoSaveStatus] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  
+  const [realTimeCalculations, setRealTimeCalculations] = useState({});
   
   const [quotationData, setQuotationData] = useState({
     title: '',
@@ -146,28 +160,73 @@ const CreateQuotationPage = () => {
   }, []);
 
   // Validation functions
-  const validateForm = () => {
-    const errors = {};
+  const validateField = (field, value, itemIndex = null) => {
+    const errors = { ...validationErrors };
+    const fieldKey = itemIndex !== null ? `item_${itemIndex}_${field}` : field;
     
-    if (!quotationData.client) {
-      errors.client = 'Client is required';
+    switch (field) {
+      case 'client':
+        if (!value) {
+          errors[fieldKey] = 'Client selection is required';
+        } else {
+          delete errors[fieldKey];
+        }
+        break;
+      case 'name':
+        if (!value || value.trim() === '') {
+          errors[fieldKey] = 'Item name is required';
+        } else {
+          delete errors[fieldKey];
+        }
+        break;
+      case 'length':
+      case 'width':
+      case 'height':
+        if (value <= 0) {
+          errors[fieldKey] = `${field.charAt(0).toUpperCase() + field.slice(1)} must be greater than 0`;
+        } else {
+          delete errors[fieldKey];
+        }
+        break;
+      case 'quantity':
+        if (value <= 0) {
+          errors[fieldKey] = 'Quantity must be at least 1';
+        } else {
+          delete errors[fieldKey];
+        }
+        break;
+      case 'labourRate':
+        if (value < 0) {
+          errors[fieldKey] = 'Labour rate cannot be negative';
+        } else {
+          delete errors[fieldKey];
+        }
+        break;
+      default:
+        break;
     }
-    
-    if (quotationData.items.length === 0) {
-      errors.items = 'At least one item is required';
-    }
-    
-    quotationData.items.forEach((item, index) => {
-      if (!item.name) {
-        errors[`item_${index}_name`] = 'Item name is required';
-      }
-      if (item.length <= 0 || item.width <= 0) {
-        errors[`item_${index}_dimensions`] = 'Length and width must be greater than 0';
-      }
-    });
     
     setValidationErrors(errors);
-    return Object.keys(errors).length === 0;
+    return !errors[fieldKey];
+  };
+
+  const validateForm = () => {
+    let isValid = true;
+    
+    // Validate client
+    if (!validateField('client', quotationData.client)) {
+      isValid = false;
+    }
+    
+    // Validate items
+    quotationData.items.forEach((item, index) => {
+      if (!validateField('name', item.name, index)) isValid = false;
+      if (!validateField('length', item.length, index)) isValid = false;
+      if (!validateField('width', item.width, index)) isValid = false;
+      if (!validateField('quantity', item.quantity, index)) isValid = false;
+    });
+    
+    return isValid;
   };
 
   const handleAutoSave = () => {
@@ -349,7 +408,7 @@ const CreateQuotationPage = () => {
     }
   };
   
-  const calculateItemCost = (item) => {
+  const calculateItemCostBreakdown = (item) => {
     let materialCost = 0;
     let componentsCost = 0;
     
@@ -386,8 +445,17 @@ const CreateQuotationPage = () => {
     };
   };
 
+  // Add the missing calculateItemCost function
+  const calculateItemCost = (item) => {
+    const breakdown = calculateItemCostBreakdown(item);
+    return breakdown.totalCost;
+  };
+
   const calculateSubtotal = () => {
-    return quotationData.items.reduce((total, item) => total + calculateItemCost(item), 0);
+    return quotationData.items.reduce((total, item) => {
+      const calc = realTimeCalculations[item.id] || calculateItemCostBreakdown(item);
+      return total + calc.totalCost;
+    }, 0);
   };
 
   const calculateMarkup = () => {
@@ -403,8 +471,9 @@ const CreateQuotationPage = () => {
   };
 
   const handleSaveDraft = () => {
+    setIsLoading(true);
     console.log('Saving draft:', quotationData);
-    // TODO: API call to save draft
+    setTimeout(() => setIsLoading(false), 1000);
   };
 
   const handlePreviewPDF = () => {
@@ -413,8 +482,11 @@ const CreateQuotationPage = () => {
   };
 
   const handleSaveAndSend = () => {
-    console.log('Saving and sending:', quotationData);
-    // TODO: API call to save and send
+    if (validateForm()) {
+      setIsLoading(true);
+      console.log('Saving and sending:', quotationData);
+      setTimeout(() => setIsLoading(false), 1000);
+    }
   };
 
   const toggleItemExpansion = (itemId) => {
@@ -431,8 +503,90 @@ const CreateQuotationPage = () => {
     }).format(amount || 0);
   };
 
+  // Sidebar Summary Component
+  const SidebarSummary = () => (
+    <Paper 
+      elevation={3} 
+      sx={{ 
+        position: 'sticky', 
+        top: 120, 
+        p: 3, 
+        backgroundColor: 'grey.50',
+        border: '1px solid',
+        borderColor: 'divider'
+      }}
+    >
+      <Box display="flex" alignItems="center" gap={1} mb={2}>
+        <ReceiptIcon color="primary" />
+        <Typography variant="h6" fontWeight="bold">
+          Quote Summary
+        </Typography>
+      </Box>
+      
+      <Stack spacing={2}>
+        <Box>
+          <Typography variant="body2" color="text.secondary">
+            Items Count
+          </Typography>
+          <Typography variant="h6" fontWeight="bold">
+            {quotationData.items.length}
+          </Typography>
+        </Box>
+        
+        <Divider />
+        
+        <Box>
+          <Typography variant="body2" color="text.secondary">
+            Subtotal
+          </Typography>
+          <Typography variant="h6">
+            {formatCurrency(calculateSubtotal())}
+          </Typography>
+        </Box>
+        
+        <Box>
+          <Typography variant="body2" color="text.secondary">
+            Markup ({quotationData.markupPercentage}%)
+          </Typography>
+          <Typography variant="body1">
+            {formatCurrency(calculateMarkup())}
+          </Typography>
+        </Box>
+        
+        <Box>
+          <Typography variant="body2" color="text.secondary">
+            Tax ({quotationData.taxRate}%)
+          </Typography>
+          <Typography variant="body1">
+            {formatCurrency(calculateTax())}
+          </Typography>
+        </Box>
+        
+        <Divider />
+        
+        <Box>
+          <Typography variant="body2" color="text.secondary">
+            Grand Total
+          </Typography>
+          <Typography variant="h5" fontWeight="bold" color="primary">
+            {formatCurrency(calculateGrandTotal())}
+          </Typography>
+        </Box>
+        
+        {autoSaveStatus && (
+          <Fade in={!!autoSaveStatus}>
+            <Alert severity="success" size="small">
+              {autoSaveStatus}
+            </Alert>
+          </Fade>
+        )}
+      </Stack>
+    </Paper>
+  );
+
   return (
     <Container maxWidth="xl" sx={{ py: 3 }}>
+      {isLoading && <LinearProgress sx={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999 }} />}
       {/* Sticky Action Bar */}
       <Paper 
         elevation={2} 
