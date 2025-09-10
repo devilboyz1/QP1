@@ -6,7 +6,7 @@ import Sidebar from './Sidebar';
 function Layout({ children, userName }) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const handleSidebarToggle = () => {
     setSidebarOpen(!sidebarOpen);
@@ -25,12 +25,8 @@ function Layout({ children, userName }) {
         sx={{ 
           flexGrow: 1, 
           p: 3,
-          width: { sm: `calc(100% - ${sidebarOpen ? '240px' : '64px'})` },
-          ml: { sm: sidebarOpen ? '240px' : '64px' },
-          transition: theme.transitions.create(['margin', 'width'], {
-            easing: theme.transitions.easing.sharp,
-            duration: theme.transitions.duration.leavingScreen,
-          }),
+          width: '100%',
+          minHeight: '100vh',
         }}
       >
         <Toolbar />

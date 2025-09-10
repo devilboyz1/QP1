@@ -662,7 +662,8 @@ const CreateQuotationPage = () => {
               Quotation Details
             </Typography>
             
-            <Grid container spacing={2}>
+            <Grid container spacing={3}>
+              {/* Row 1: Title and Client */}
               <Grid item xs={12} md={6}>
                 <TextField
                   fullWidth
@@ -687,6 +688,7 @@ const CreateQuotationPage = () => {
                 />
               </Grid>
               
+              {/* Row 2: Project Address */}
               <Grid item xs={12}>
                 <TextField
                   fullWidth
@@ -699,6 +701,7 @@ const CreateQuotationPage = () => {
                 />
               </Grid>
               
+              {/* Row 3: Date fields and Currency */}
               <Grid item xs={12} md={3}>
                 <TextField
                   fullWidth
@@ -753,6 +756,7 @@ const CreateQuotationPage = () => {
                 />
               </Grid>
               
+              {/* Row 4: Salesperson */}
               <Grid item xs={12} md={6}>
                 <TextField
                   fullWidth
@@ -763,6 +767,7 @@ const CreateQuotationPage = () => {
                 />
               </Grid>
               
+              {/* Row 5: Notes */}
               <Grid item xs={12}>
                 <TextField
                   fullWidth
@@ -822,7 +827,7 @@ const CreateQuotationPage = () => {
                     title={
                       <Box display="flex" alignItems="center" gap={2}>
                         <Typography variant="subtitle1" fontWeight="bold">
-                          {item.name || `Item ${index + 1}`} ({item.quantity})
+                          {item.name || `Item ${index + 1}`}
                         </Typography>
                         <Chip 
                           label={formatCurrency(calculateItemCost(item))} 
@@ -902,186 +907,192 @@ const CreateQuotationPage = () => {
                           <Typography variant="subtitle2" gutterBottom fontWeight="bold">
                             Measurements
                           </Typography>
-                        </Grid>
-                        
-                        {/* Cabinet Type Selection */}
-                        <Grid item xs={12} md={4}>
-                          <FormControl fullWidth variant="outlined" size="small">
-                            <InputLabel>Cabinet Type</InputLabel>
-                            <Select
-                              value={item.cabinetType}
-                              onChange={(e) => updateCabinetType(item.id, e.target.value)}
-                              label="Cabinet Type"
-                            >
-                              {cabinetTypes.map(type => (
-                                <MenuItem key={type.value} value={type.value}>
-                                  {type.label} {type.standardDepth && `(${type.standardDepth}ft depth)`}
-                                </MenuItem>
-                              ))}
-                            </Select>
-                          </FormControl>
-                        </Grid>
-                        
-                        {/* Primary Length */}
-                        <Grid item xs={12} md={4}>
-                          <TextField
-                            fullWidth
-                            variant="outlined"
-                            size="small"
-                            label="Length (Primary)"
-                            type="number"
-                            value={item.length}
-                            onChange={(e) => updateItem(item.id, 'length', parseFloat(e.target.value) || 0)}
-                            InputProps={{
-                              endAdornment: <InputAdornment position="end">ft</InputAdornment>
-                            }}
-                            helperText="Primary charging dimension"
-                          />
-                        </Grid>
-                        
-                        {/* Height */}
-                        <Grid item xs={12} md={4}>
-                          <TextField
-                            fullWidth
-                            variant="outlined"
-                            size="small"
-                            label="Height"
-                            type="number"
-                            value={item.height}
-                            onChange={(e) => updateItem(item.id, 'height', parseFloat(e.target.value) || 0)}
-                            InputProps={{
-                              endAdornment: <InputAdornment position="end">ft</InputAdornment>
-                            }}
-                          />
-                        </Grid>
-                        
-                        {/* Depth/Width based on cabinet type */}
-                        <Grid item xs={12} md={4}>
-                          <TextField
-                            fullWidth
-                            variant="outlined"
-                            size="small"
-                            label={item.useStandardDepth ? `Depth (Standard: ${item.standardDepth}ft)` : "Custom Depth"}
-                            type="number"
-                            value={item.useStandardDepth ? item.standardDepth : item.width}
-                            onChange={(e) => {
-                              if (!item.useStandardDepth) {
-                                updateItem(item.id, 'width', parseFloat(e.target.value) || 0);
-                              }
-                            }}
-                            disabled={item.useStandardDepth}
-                            InputProps={{
-                              endAdornment: <InputAdornment position="end">ft</InputAdornment>
-                            }}
-                            helperText={item.useStandardDepth ? "Using standard depth" : "Custom depth"}
-                          />
-                        </Grid>
-                        
-                        {/* Pricing Method */}
-                        <Grid item xs={12} md={4}>
-                          <FormControl fullWidth variant="outlined" size="small">
-                            <InputLabel>Pricing Method</InputLabel>
-                            <Select
-                              value={item.pricingMethod}
-                              onChange={(e) => updateItem(item.id, 'pricingMethod', e.target.value)}
-                              label="Pricing Method"
-                            >
-                              {pricingMethods.map(method => (
-                                <MenuItem key={method.value} value={method.value}>
-                                  {method.label} {method.primary && '(Primary)'}
-                                </MenuItem>
-                              ))}
-                            </Select>
-                          </FormControl>
-                        </Grid>
-                        
-                        {/* Linear Feet Display */}
-                        {item.pricingMethod === 'linear-foot' && (
-                          <Grid item xs={12} md={4}>
-                            <TextField
-                              fullWidth
-                              variant="outlined"
-                              size="small"
-                              label="Linear Feet"
-                              value={calculateLinearFeet(item).toFixed(2)}
-                              disabled
-                              InputProps={{
-                                endAdornment: <InputAdornment position="end">lf</InputAdornment>
-                              }}
-                              helperText="Calculated: Length × Quantity"
-                            />
+                          <Grid container spacing={2}>
+                            {/* Cabinet Type Selection */}
+                            <Grid item xs={12} md={3}>
+                              <FormControl fullWidth variant="outlined" size="small">
+                                <InputLabel>Cabinet Type</InputLabel>
+                                <Select
+                                  value={item.cabinetType}
+                                  onChange={(e) => updateCabinetType(item.id, e.target.value)}
+                                  label="Cabinet Type"
+                                >
+                                  {cabinetTypes.map(type => (
+                                    <MenuItem key={type.value} value={type.value}>
+                                      {type.label} {type.standardDepth && `(${type.standardDepth}ft depth)`}
+                                    </MenuItem>
+                                  ))}
+                                </Select>
+                              </FormControl>
+                            </Grid>
+                            
+                            {/* Primary Length */}
+                            <Grid item xs={12} md={3}>
+                              <TextField
+                                fullWidth
+                                variant="outlined"
+                                size="small"
+                                label="Length (Primary)"
+                                type="number"
+                                value={item.length}
+                                onChange={(e) => updateItem(item.id, 'length', parseFloat(e.target.value) || 0)}
+                                InputProps={{
+                                  endAdornment: <InputAdornment position="end">ft</InputAdornment>
+                                }}
+                                helperText="Primary charging dimension"
+                              />
+                            </Grid>
+                            
+                            {/* Height */}
+                            <Grid item xs={12} md={3}>
+                              <TextField
+                                fullWidth
+                                variant="outlined"
+                                size="small"
+                                label="Height"
+                                type="number"
+                                value={item.height}
+                                onChange={(e) => updateItem(item.id, 'height', parseFloat(e.target.value) || 0)}
+                                InputProps={{
+                                  endAdornment: <InputAdornment position="end">ft</InputAdornment>
+                                }}
+                              />
+                            </Grid>
+                            
+                            {/* Depth/Width based on cabinet type */}
+                            <Grid item xs={12} md={3}>
+                              <TextField
+                                fullWidth
+                                variant="outlined"
+                                size="small"
+                                label={item.useStandardDepth ? `Depth (Standard: ${item.standardDepth}ft)` : "Custom Depth"}
+                                type="number"
+                                value={item.useStandardDepth ? item.standardDepth : item.width}
+                                onChange={(e) => {
+                                  if (!item.useStandardDepth) {
+                                    updateItem(item.id, 'width', parseFloat(e.target.value) || 0);
+                                  }
+                                }}
+                                disabled={item.useStandardDepth}
+                                InputProps={{
+                                  endAdornment: <InputAdornment position="end">ft</InputAdornment>
+                                }}
+                                helperText={item.useStandardDepth ? "Using standard depth" : "Custom depth"}
+                              />
+                            </Grid>
+                            
+                            {/* Pricing Method */}
+                            <Grid item xs={12} md={6}>
+                              <FormControl fullWidth variant="outlined" size="small">
+                                <InputLabel>Pricing Method</InputLabel>
+                                <Select
+                                  value={item.pricingMethod}
+                                  onChange={(e) => updateItem(item.id, 'pricingMethod', e.target.value)}
+                                  label="Pricing Method"
+                                >
+                                  {pricingMethods.map(method => (
+                                    <MenuItem key={method.value} value={method.value}>
+                                      {method.label} {method.primary && '(Primary)'}
+                                    </MenuItem>
+                                  ))}
+                                </Select>
+                              </FormControl>
+                            </Grid>
+                            
+                            {/* Linear Feet Display */}
+                            {item.pricingMethod === 'linear-foot' && (
+                              <Grid item xs={12} md={6}>
+                                <TextField
+                                  fullWidth
+                                  variant="outlined"
+                                  size="small"
+                                  label="Linear Feet"
+                                  value={calculateLinearFeet(item).toFixed(2)}
+                                  disabled
+                                  InputProps={{
+                                    endAdornment: <InputAdornment position="end">lf</InputAdornment>
+                                  }}
+                                  helperText="Calculated: Length × Quantity"
+                                />
+                              </Grid>
+                            )}
                           </Grid>
-                        )}
+                        </Grid>
                         
-                        {/* Material Selection */}
+                        {/* Material & Costs */}
                         <Grid item xs={12}>
                           <Typography variant="subtitle2" gutterBottom fontWeight="bold">
                             Material & Costs
                           </Typography>
-                        </Grid>
-                        
-                        <Grid item xs={12} md={6}>
-                          <Autocomplete
-                            options={materials}
-                            getOptionLabel={(option) => `${option.name} (${option.thickness}) - ${formatCurrency(option.cost)}/${option.unit}`}
-                            value={item.material}
-                            onChange={(event, newValue) => {
-                              updateItem(item.id, 'material', newValue);
-                            }}
-                            renderInput={(params) => (
-                              <TextField {...params} label="Base Material" variant="outlined" size="small" />
-                            )}
-                          />
-                        </Grid>
-                        
-                        <Grid item xs={6} md={2}>
-                          <TextField
-                            fullWidth
-                            label="Hardware Cost"
-                            type="number"
-                            value={item.hardware}
-                            onChange={(e) => updateItem(item.id, 'hardware', parseFloat(e.target.value) || 0)}
-                            variant="outlined"
-                            size="small"
-                            InputProps={{
-                              startAdornment: <InputAdornment position="start">{quotationData.currency}</InputAdornment>
-                            }}
-                          />
-                        </Grid>
-                        
-                        <Grid item xs={6} md={2}>
-                          <TextField
-                            fullWidth
-                            label="Labour Hours"
-                            type="number"
-                            value={item.labourHours}
-                            onChange={(e) => updateItem(item.id, 'labourHours', parseFloat(e.target.value) || 0)}
-                            variant="outlined"
-                            size="small"
-                            InputProps={{
-                              endAdornment: <InputAdornment position="end">hrs</InputAdornment>
-                            }}
-                          />
-                        </Grid>
-                        
-                        <Grid item xs={12} md={2}>
-                          <Box 
-                            sx={{ 
-                              p: 1, 
-                              backgroundColor: 'primary.50', 
-                              borderRadius: 1, 
-                              textAlign: 'center',
-                              border: '1px solid',
-                              borderColor: 'primary.200'
-                            }}
-                          >
-                            <Typography variant="caption" color="text.secondary">
-                              Item Total
-                            </Typography>
-                            <Typography variant="h6" color="primary.main" fontWeight="bold">
-                              {formatCurrency(calculateItemCost(item))}
-                            </Typography>
-                          </Box>
+                          <Grid container spacing={2}>
+                            <Grid item xs={12} md={4}>
+                              <Autocomplete
+                                options={materials}
+                                getOptionLabel={(option) => `${option.name} (${option.thickness}) - ${formatCurrency(option.cost)}/${option.unit}`}
+                                value={item.material}
+                                onChange={(event, newValue) => {
+                                  updateItem(item.id, 'material', newValue);
+                                }}
+                                renderInput={(params) => (
+                                  <TextField {...params} label="Base Material" variant="outlined" size="small" />
+                                )}
+                              />
+                            </Grid>
+                            
+                            <Grid item xs={12} md={2}>
+                              <TextField
+                                fullWidth
+                                label="Hardware Cost"
+                                type="number"
+                                value={item.hardware}
+                                onChange={(e) => updateItem(item.id, 'hardware', parseFloat(e.target.value) || 0)}
+                                variant="outlined"
+                                size="small"
+                                InputProps={{
+                                  startAdornment: <InputAdornment position="start">{quotationData.currency}</InputAdornment>
+                                }}
+                              />
+                            </Grid>
+                            
+                            <Grid item xs={12} md={2}>
+                              <TextField
+                                fullWidth
+                                label="Labour Hours"
+                                type="number"
+                                value={item.labourHours}
+                                onChange={(e) => updateItem(item.id, 'labourHours', parseFloat(e.target.value) || 0)}
+                                variant="outlined"
+                                size="small"
+                                InputProps={{
+                                  endAdornment: <InputAdornment position="end">hrs</InputAdornment>
+                                }}
+                              />
+                            </Grid>
+                            
+                            <Grid item xs={12} md={4}>
+                              <Box 
+                                sx={{ 
+                                  p: 2, 
+                                  backgroundColor: 'primary.50', 
+                                  borderRadius: 1, 
+                                  textAlign: 'center',
+                                  border: '1px solid',
+                                  borderColor: 'primary.200',
+                                  height: '100%',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  justifyContent: 'center'
+                                }}
+                              >
+                                <Typography variant="caption" color="text.secondary">
+                                  Item Total
+                                </Typography>
+                                <Typography variant="h6" color="primary.main" fontWeight="bold">
+                                  {formatCurrency(calculateItemCost(item))}
+                                </Typography>
+                              </Box>
+                            </Grid>
+                          </Grid>
                         </Grid>
                         
                         {/* Components Section */}
@@ -1089,7 +1100,7 @@ const CreateQuotationPage = () => {
                           <Divider sx={{ my: 2 }} />
                           <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
                             <Typography variant="subtitle2" fontWeight="bold">
-                              Components ({item.components.length})
+                              Components
                             </Typography>
                             <Button
                               size="small"

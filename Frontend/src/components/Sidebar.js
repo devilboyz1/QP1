@@ -91,47 +91,36 @@ function Sidebar({ open, onToggle }) {
   const navigate = useNavigate();
   const location = useLocation();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  const [internalOpen, setInternalOpen] = useState(true);
 
-  // Use external open prop if provided, otherwise use internal state
-  const isOpen = open !== undefined ? open : internalOpen;
-
-  // Handle responsive behavior
-  useEffect(() => {
-    if (isMobile) {
-      setInternalOpen(false);
-    } else {
-      setInternalOpen(true);
-    }
-  }, [isMobile]);
+  // Use external open prop, defaulting to false if not provided
+  const isOpen = open !== undefined ? open : false;
 
   const handleDrawerToggle = () => {
     if (onToggle) {
       onToggle();
-    } else {
-      setInternalOpen(!internalOpen);
     }
   };
 
   const handleNavigation = (path) => {
     navigate(path);
-    // Close sidebar on mobile after navigation
-    if (isMobile && onToggle) {
+    // Close sidebar after navigation since it's now always an overlay
+    if (onToggle) {
       onToggle();
     }
   };
 
   return (
-    <Drawer 
-      variant={isMobile ? "temporary" : "permanent"} 
+    <MuiDrawer 
+      variant="temporary"
       open={isOpen}
-      onClose={isMobile ? handleDrawerToggle : undefined}
+      onClose={handleDrawerToggle}
       ModalProps={{
         keepMounted: true, // Better open performance on mobile.
       }}
       sx={{
         '& .MuiDrawer-paper': {
-          zIndex: theme.zIndex.drawer,
+          zIndex: theme.zIndex.drawer + 1,
+          width: drawerWidth,
         },
       }}
     >
@@ -219,7 +208,7 @@ function Sidebar({ open, onToggle }) {
           </ListItem>
         ))}
       </List>
-    </Drawer>
+    </MuiDrawer>
   );
 }
 
