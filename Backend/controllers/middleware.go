@@ -1,6 +1,10 @@
 package controllers
 
 import (
+	"qp1/database"
+	"qp1/models"
+	"strconv"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -48,8 +52,23 @@ func RequireUser(c *fiber.Ctx) error {
 	if !ok {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "无效用户ID"})
 	}
-	role, _ := (*claims)["role"].(string)
-	// 设置用户信息到上下文
-	c.Locals("user", map[string]interface{}{"id": id, "role": role})
+	// Remove the unused role variable declaration
+	// role, _ := (*claims)["role"].(string)
+	// Remove unused role variable
+
+	// Convert string ID to uint and fetch user from database
+	userID, err := strconv.ParseUint(id, 10, 32)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "无效用户ID格式"})
+	}
+
+	// Fetch user from database
+	var user models.User
+	if err := database.DB.First(&user, uint(userID)).Error; err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "用户不存在"})
+	}
+
+	// Store the actual User model
+	c.Locals("user", user)
 	return c.Next()
 }

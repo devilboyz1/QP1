@@ -27,12 +27,13 @@ func SetupRoutes(app *fiber.App) {
 	app.Post("/api/admin/delete-user", controllers.RequireAdmin, controllers.AdminDeleteUser)
 
 	// -------------------- Client Management (Admin Only) --------------------
-	app.Post("/api/admin/client", controllers.RequireAdmin, controllers.AddClient)
-	app.Put("/api/admin/client/:id", controllers.RequireAdmin, controllers.UpdateClient)
-	app.Delete("/api/admin/client/:id", controllers.RequireAdmin, controllers.DeleteClient)
-	app.Get("/api/admin/client/:id", controllers.RequireAdmin, controllers.GetClientById)
-	app.Get("/api/admin/clients", controllers.RequireAdmin, controllers.ListClients)
-	app.Get("/api/admin/search-clients", controllers.RequireAdmin, controllers.SearchClients)
+	// Remove these client management routes:
+	// app.Post("/api/admin/client", controllers.RequireAdmin, controllers.AddClient)
+	// app.Put("/api/admin/client/:id", controllers.RequireAdmin, controllers.UpdateClient)
+	// app.Delete("/api/admin/client/:id", controllers.RequireAdmin, controllers.DeleteClient)
+	// app.Get("/api/admin/client/:id", controllers.RequireAdmin, controllers.GetClientById)
+	// app.Get("/api/admin/clients", controllers.RequireAdmin, controllers.ListClients)
+	// app.Get("/api/admin/search-clients", controllers.RequireAdmin, controllers.SearchClients)
 
 	// -------------------- Material Management (Admin Only) --------------------
 	app.Post("/api/admin/create-material", controllers.RequireAdmin, controllers.CreateMaterial)
@@ -51,13 +52,16 @@ func SetupRoutes(app *fiber.App) {
 	app.Get("/api/admin/search-components", controllers.RequireAdmin, controllers.SearchComponents)
 
 	// -------------------- Quotation Management (User) --------------------
-	app.Post("/api/quotation", controllers.RequireUser, controllers.CreateQuotation)
+	app.Post("/api/quotations", controllers.RequireUser, controllers.CreateQuotation)
+	app.Post("/api/quotations/draft", controllers.RequireUser, controllers.SaveQuotationDraft)
 	app.Get("/api/quotations", controllers.RequireUser, controllers.ListQuotations)
-	app.Get("/api/quotation/:id", controllers.RequireUser, controllers.GetQuotation)
-	app.Put("/api/quotation/:id", controllers.RequireUser, controllers.UpdateQuotation)
-	app.Delete("/api/quotation/:id", controllers.RequireUser, controllers.DeleteQuotation)
-	app.Post("/api/quotation/:id/duplicate", controllers.RequireUser, controllers.DuplicateQuotation)
-	app.Get("/api/quotation/:id/pdf", controllers.RequireUser, controllers.GenerateQuotationPDF)
+	app.Get("/api/quotations/:id", controllers.RequireUser, controllers.GetQuotation)
+	app.Put("/api/quotations/:id", controllers.RequireUser, controllers.UpdateQuotation)
+	app.Put("/api/quotations/:id/draft", controllers.RequireUser, controllers.SaveQuotationDraft)
+	app.Delete("/api/quotations/:id", controllers.RequireUser, controllers.DeleteQuotation)
+	app.Put("/api/quotations/:id/status", controllers.RequireUser, controllers.UpdateQuotationStatus)
+	app.Post("/api/quotations/:id/duplicate", controllers.RequireUser, controllers.DuplicateQuotation)
+	app.Get("/api/quotations/:id/pdf", controllers.RequireUser, controllers.GenerateQuotationPDF)
 
 	// -------------------- Quotation Management (Admin) --------------------
 	app.Get("/api/admin/quotations", controllers.RequireAdmin, controllers.ListAllQuotations)
@@ -79,5 +83,4 @@ func SetupRoutes(app *fiber.App) {
 	// -------------------- User Self-Service (Profile & Password) --------------------
 	app.Put("/api/user/profile", controllers.RequireUser, controllers.UpdateUserProfile)
 	app.Put("/api/user/password", controllers.RequireUser, controllers.UpdateUserPassword)
-
 }

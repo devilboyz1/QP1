@@ -1,266 +1,466 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Typography,
   Button,
   TextField,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
   Grid,
   Paper,
-  Card,
-  CardContent,
-  CardHeader,
-  Collapse,
-  IconButton,
-  Divider,
   Chip,
   Breadcrumbs,
   Link,
   Container,
   Autocomplete,
-  InputAdornment,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Tabs,
-  Tab,
   Alert,
-  FormHelperText,
-  Snackbar,
   Stack,
-  Fade,
   LinearProgress,
   Tooltip,
-  Badge
+  Badge,
+  CircularProgress,
+  Fade,
+  Card,
+  CardContent
 } from '@mui/material';
 import {
   Add as AddIcon,
-  Remove as RemoveIcon,
-  ExpandMore as ExpandMoreIcon,
-  ExpandLess as ExpandLessIcon,
-  ContentCopy as CopyIcon,
-  Delete as DeleteIcon,
   Save as SaveIcon,
   Preview as PreviewIcon,
   Send as SendIcon,
   ArrowBack as ArrowBackIcon,
-  Calculate as CalculateIcon,
-  Warning as WarningIcon,
-  Receipt as ReceiptIcon,
-  Assignment as AssignmentIcon,
   Inventory as InventoryIcon,
-  Info as InfoIcon,
   CheckCircle as CheckCircleIcon,
-  Error as ErrorIcon
+  Error as ErrorIcon,
+  Wifi as WifiIcon,
+  WifiOff as WifiOffIcon,
+  Schedule as ScheduleIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 
+// Import constants and utilities
+import {
+  defaultNewItem,
+  defaultNewComponent
+} from '../constants/quotationConstants';
+
+import {
+  calculateSubtotal,
+  calculateMarkup,
+  calculateTax,
+  calculateGrandTotal,
+  formatCurrency,
+  generateQuotationNumber
+} from '../utils/quotationUtils';
+
+import {
+  validateField,
+  validateForm,
+  getFieldError,
+  hasFieldError
+} from '../utils/validationUtils';
+
+import {
+  mockClients,
+  mockMaterials,
+  mockComponents
+} from '../data/mockData';
+
+import { SidebarSummary } from '../components/quotation/SidebarSummary';
+
+import { QuotationItemCard } from '../components/quotation/QuotationItemCard';
+import { quotationService } from '../services/quotationService';
+import { quotationAPI } from '../services/quotationApi';
+import { useNotification } from '../contexts/NotificationContext';
+import LoadingOverlay from '../components/LoadingOverlay';
+import { useQuotationState } from '../hooks/useQuotationState';
+
 const CreateQuotationPage = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState(0);
-  const [validationErrors, setValidationErrors] = useState({});
-  const [autoSaveStatus, setAutoSaveStatus] = useState('');
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
-  
-  const [realTimeCalculations, setRealTimeCalculations] = useState({});
-  
-  const [quotationData, setQuotationData] = useState({
-    title: '',
-    client: null,
-    projectAddress: '',
-    date: new Date().toISOString().split('T')[0],
-    expiryDate: '',
-    currency: 'USD',
-    taxRate: 10,
-    salesperson: '',
-    notes: '',
-    items: [],
-    markupPercentage: 20,
-    defaultPricingMethod: 'linear-foot',
-    measurementUnit: 'ft'
+  const { showSuccess, showError, showWarning, showInfo } = useNotification();
+
+  // Enhanced loading and operation states
+  const [operationStates, setOperationStates] = useState({
+    savingDraft: false,
+    savingAndSending: false,
+    addingItem: false,
+    removingItem: {},
+    duplicatingItem: {},
+    autoSaving: false
   });
 
-  const [expandedItems, setExpandedItems] = useState({});
-  const [clients, setClients] = useState([
-    { id: 1, name: 'ABC Corporation', email: 'contact@abc.com' },
-    { id: 2, name: 'XYZ Ltd', email: 'info@xyz.com' },
-    { id: 3, name: 'Home Renovations Inc', email: 'hello@homereno.com' }
-  ]);
+  const [loadingState, setLoadingState] = useState({
+    isLoading: false,
+    message: '',
+    progress: null,
+  });
 
-  const [materials, setMaterials] = useState([
-    { id: 1, name: 'Oak Wood', unit: 'sqm', cost: 45.00, thickness: '18mm' },
-    { id: 2, name: 'Pine Wood', unit: 'sqm', cost: 25.00, thickness: '18mm' },
-    { id: 3, name: 'MDF Board', unit: 'sqm', cost: 15.00, thickness: '18mm' },
-    { id: 4, name: 'Plywood', unit: 'sqm', cost: 35.00, thickness: '18mm' },
-    { id: 5, name: 'Glass Panel', unit: 'sqm', cost: 80.00, thickness: '6mm' }
-  ]);
+  // Enhanced feedback and monitoring states
+  const [feedbackState, setFeedbackState] = useState({
+    saveCount: 0,
+    lastSaveTime: null,
+    isOnline: navigator.onLine,
+    pendingOperations: 0,
+    connectionStatus: 'connected'
+  });
 
-  const [components, setComponents] = useState([
-    { id: 1, name: 'Cabinet Door', category: 'Door' },
-    { id: 2, name: 'Drawer Box', category: 'Drawer' },
-    { id: 3, name: 'Shelf', category: 'Storage' },
-    { id: 4, name: 'Table Top', category: 'Surface' },
-    { id: 5, name: 'Side Panel', category: 'Panel' }
-  ]);
+  const [retryCount, setRetryCount] = useState(0);
+  const [lastError, setLastError] = useState(null);
 
-  const unitTypes = ['mm', 'cm', 'm', 'inch', 'ft'];
-  
-  // 更新定价方法以支持线性英尺为主的定价
-  const pricingMethods = [
-    { value: 'linear-foot', label: 'Linear Foot (尺走)', unit: 'lf', primary: true },
-    { value: 'per-piece', label: 'Per Piece', unit: 'pcs' },
-    { value: 'area', label: 'Area (sqm)', unit: 'sqm' },
-    { value: 'volume', label: 'Volume (m³)', unit: 'm³' }
-  ];
-  
-  const costingMethods = ['linear-foot', 'per-piece', 'area', 'volume'];
-  
-  // 添加橱柜类型和标准化深度
-  const cabinetTypes = [
-    { value: 'base', label: 'Base Cabinet', standardDepth: 2, unit: 'ft' },
-    { value: 'wall', label: 'Wall Cabinet', standardDepth: 1, unit: 'ft' },
-    { value: 'tall', label: 'Tall Cabinet', standardDepth: 2, unit: 'ft' },
-    { value: 'custom', label: 'Custom', standardDepth: null, unit: 'ft' }
-  ];
-  
-  // 组件类型定义
-  const componentTypes = [
-    { value: 'drawer', label: 'Drawer', pricingType: 'per-piece' },
-    { value: 'glass-door', label: 'Glass Door', pricingType: 'per-piece' },
-    { value: 'countertop', label: 'Countertop', pricingType: 'linear-foot' },
-    { value: 'crown-molding', label: 'Crown Molding', pricingType: 'linear-foot' },
-    { value: 'hardware', label: 'Hardware', pricingType: 'per-piece' }
-  ];
-
-  // Auto-save functionality
-  useEffect(() => {
-    const autoSaveTimer = setTimeout(() => {
-      if (quotationData.title || quotationData.client || quotationData.items.length > 0) {
-        handleAutoSave();
-      }
-    }, 5000);
-
-    return () => clearTimeout(autoSaveTimer);
-  }, [quotationData]);
-
-  useEffect(() => {
-    // Generate auto quotation number
-    const quotationNo = `QT-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
-    setQuotationData(prev => ({
-      ...prev,
-      title: `Quote ${quotationNo}`
-    }));
-  }, []);
-
-  // Validation functions
-  const validateField = (field, value, itemIndex = null) => {
-    const errors = { ...validationErrors };
-    const fieldKey = itemIndex !== null ? `item_${itemIndex}_${field}` : field;
+  // Enhanced error handling with retry logic
+  const handleApiError = useCallback((error, operation = 'operation', canRetry = true) => {
+    console.error(`${operation} failed:`, error);
+    setLastError({ error, operation, timestamp: Date.now() });
     
-    switch (field) {
-      case 'client':
-        if (!value) {
-          errors[fieldKey] = 'Client selection is required';
-        } else {
-          delete errors[fieldKey];
-        }
+    let errorMessage = `Failed to ${operation}`;
+    
+    if (error.response) {
+      // Server responded with error status
+      const status = error.response.status;
+      const data = error.response.data;
+      
+      switch (status) {
+        case 400:
+          errorMessage = data.message || 'Invalid request. Please check your input.';
+          break;
+        case 401:
+          errorMessage = 'Session expired. Please log in again.';
+          setTimeout(() => navigate('/login'), 2000);
+          break;
+        case 403:
+          errorMessage = 'You do not have permission to perform this action.';
+          break;
+        case 404:
+          errorMessage = 'The requested resource was not found.';
+          break;
+        case 422:
+          errorMessage = data.message || 'Validation failed. Please check your input.';
+          break;
+        case 500:
+          errorMessage = 'Server error. Please try again later.';
+          break;
+        default:
+          errorMessage = data.message || `Server error (${status}). Please try again.`;
+      }
+    } else if (error.request) {
+      // Network error
+      errorMessage = 'Network error. Please check your connection and try again.';
+    } else {
+      // Other error
+      errorMessage = error.message || 'An unexpected error occurred.';
+    }
+    
+    const options = {
+      title: `${operation.charAt(0).toUpperCase() + operation.slice(1)} Failed`,
+      persistent: !canRetry,
+    };
+    
+    if (canRetry && retryCount < 3) {
+      options.action = (
+        <Button
+          color="inherit"
+          size="small"
+          onClick={() => handleRetry(operation)}
+        >
+          Retry ({3 - retryCount} left)
+        </Button>
+      );
+    }
+    
+    showError(errorMessage, options);
+  }, [navigate, showError, retryCount]);
+
+  const handleRetry = useCallback((operation) => {
+    setRetryCount(prev => prev + 1);
+    
+    switch (operation) {
+      case 'save draft':
+        handleSaveDraft();
         break;
-      case 'name':
-        if (!value || value.trim() === '') {
-          errors[fieldKey] = 'Item name is required';
-        } else {
-          delete errors[fieldKey];
-        }
+      case 'save and send':
+        handleSaveAndSend();
         break;
-      case 'length':
-      case 'width':
-      case 'height':
-        if (value <= 0) {
-          errors[fieldKey] = `${field.charAt(0).toUpperCase() + field.slice(1)} must be greater than 0`;
-        } else {
-          delete errors[fieldKey];
-        }
-        break;
-      case 'quantity':
-        if (value <= 0) {
-          errors[fieldKey] = 'Quantity must be at least 1';
-        } else {
-          delete errors[fieldKey];
-        }
-        break;
-      case 'labourRate':
-        if (value < 0) {
-          errors[fieldKey] = 'Labour rate cannot be negative';
-        } else {
-          delete errors[fieldKey];
-        }
+      case 'auto-save':
+        handleAutoSave();
         break;
       default:
-        break;
+        showWarning('Retry not available for this operation.');
+    }
+  }, []);
+  
+  // Centralized state management with persistence
+  const {
+    quotationData,
+    updateQuotationData,
+    isDirty,
+    lastSaved,
+    autoSaveStatus,
+    scheduleAutoSave,
+    markAsSaved,
+    clearDraft,
+    hasUnsavedChanges
+  } = useQuotationState();
+  
+  const [activeTab, setActiveTab] = useState(0);
+  const [validationErrors, setValidationErrors] = useState({});
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
+  const [realTimeCalculations, setRealTimeCalculations] = useState({});
+  const [currentQuotationId, setCurrentQuotationId] = useState(null);
+  const [expandedItems, setExpandedItems] = useState({});
+  
+  // Use imported mock data
+  const [clients, setClients] = useState(mockClients);
+  const [materials, setMaterials] = useState(mockMaterials);
+  const [components, setComponents] = useState(mockComponents);
+
+  // Add missing calculateItemCost function
+  const calculateItemCost = useCallback((item) => {
+    if (!item) return 0;
+    
+    let totalCost = 0;
+    
+    // Calculate material costs
+    if (item.materials && item.materials.length > 0) {
+      totalCost += item.materials.reduce((sum, material) => {
+        return sum + (material.quantity * material.unitPrice);
+      }, 0);
     }
     
+    // Calculate component costs
+    if (item.components && item.components.length > 0) {
+      totalCost += item.components.reduce((sum, component) => {
+        return sum + (component.quantity * component.unitPrice);
+      }, 0);
+    }
+    
+    // Apply markup
+    if (item.markup && item.markup > 0) {
+      totalCost *= (1 + item.markup / 100);
+    }
+    
+    return totalCost;
+  }, []);
+
+  // Move handleAutoSave outside useEffect
+  const handleAutoSave = useCallback(async (data) => {
+    if (!data.title && !data.client && data.items.length === 0) {
+      return;
+    }
+    
+    try {
+      const apiData = transformQuotationDataForAPI(data);
+      const result = await quotationService.saveDraft(apiData, currentQuotationId);
+      
+      if (result.success) {
+        if (!currentQuotationId && result.data?.id) {
+          setCurrentQuotationId(result.data.id);
+        }
+        
+        // Mark as saved with server data
+        markAsSaved({
+          id: result.data.id,
+          quotationNo: result.data.quotation_no,
+          totalCost: result.data.total_cost
+        });
+      }
+    } catch (error) {
+      console.error('Auto-save failed:', error);
+      throw error;
+    }
+  }, [currentQuotationId, markAsSaved]);
+
+  // Auto-save functionality with the new hook
+  useEffect(() => {
+    scheduleAutoSave(handleAutoSave);
+  }, [quotationData, currentQuotationId, scheduleAutoSave, handleAutoSave]);
+
+  // Initialize quotation number on mount
+  useEffect(() => {
+    if (!quotationData.title || quotationData.title === '') {
+      const quotationNo = generateQuotationNumber();
+      updateQuotationData(prev => ({
+        ...prev,
+        title: `Quote ${quotationNo}`
+      }));
+    }
+  }, []);
+
+
+
+  const transformQuotationDataForAPI = (data) => {
+    return {
+      title: data.title || '',
+      description: data.description || '',
+      client_id: data.client?.id || null,
+      project_name: data.project?.name || '',
+      due_date: data.project?.deadline ? new Date(data.project.deadline).toISOString() : null,
+      notes: data.notes || '',
+      markup: parseFloat(data.markupPercentage) || 0,
+      tax_rate: parseFloat(data.taxRate) || 0,
+      items: data.items.filter(item => item.componentId && item.quantity > 0).map(item => ({
+        component_id: item.componentId,
+        length: parseFloat(item.length) || 1,
+        width: parseFloat(item.width) || 1,
+        height: parseFloat(item.height) || 1,
+        quantity: parseInt(item.quantity) || 1,
+        notes: item.notes || ''
+      })),
+      materials: data.materials?.map(material => ({
+        material_id: material.materialId || material.id,
+        quantity: parseFloat(material.quantity) || 0,
+        unit_cost: parseFloat(material.unitCost) || 0
+      })) || []
+    };
+  };
+
+  const validateQuotationData = (data) => {
+    const errors = {};
+    
+    if (!data.title || data.title.trim() === '') {
+      errors.title = 'Quotation title is required';
+    }
+    
+    if (!data.items || data.items.length === 0) {
+      errors.items = 'At least one item is required';
+    } else {
+      data.items.forEach((item, index) => {
+        if (!item.componentId) {
+          errors[`item_${index}_component`] = 'Component is required';
+        }
+        if (!item.quantity || item.quantity <= 0) {
+          errors[`item_${index}_quantity`] = 'Quantity must be greater than 0';
+        }
+        if (!item.length || item.length <= 0) {
+          errors[`item_${index}_length`] = 'Length must be greater than 0';
+        }
+        if (!item.width || item.width <= 0) {
+          errors[`item_${index}_width`] = 'Width must be greater than 0';
+        }
+        if (!item.height || item.height <= 0) {
+          errors[`item_${index}_height`] = 'Height must be greater than 0';
+        }
+      });
+    }
+    
+    return errors;
+  };
+
+  const handleSaveDraft = async () => {
+    if (loadingState.isLoading) return;
+    
+    try {
+      setLoadingState({
+        isLoading: true,
+        message: 'Saving draft...',
+        progress: null,
+      });
+      
+      const apiData = transformQuotationDataForAPI(quotationData);
+      const result = await quotationService.saveDraft(apiData, currentQuotationId);
+      
+      if (result.success) {
+        setCurrentQuotationId(result.data.id);
+        setRetryCount(0);
+        
+        // Mark as saved with server data
+        markAsSaved({
+          id: result.data.id,
+          quotationNo: result.data.quotation_no,
+          totalCost: result.data.total_cost
+        });
+        
+        showSuccess('Draft saved successfully!', {
+          title: 'Save Successful',
+        });
+      } else {
+        throw new Error(result.error || 'Failed to save draft');
+      }
+    } catch (error) {
+      handleApiError(error, 'save draft', true);
+    } finally {
+      setLoadingState({ isLoading: false, message: '', progress: null });
+    }
+  };
+
+  // Add the missing handleSaveAndSend function
+  const handleSaveAndSend = async () => {
+    if (loadingState.isLoading) return;
+    
+    const errors = validateQuotationData(quotationData);
     setValidationErrors(errors);
-    return !errors[fieldKey];
-  };
-
-  const validateForm = () => {
-    let isValid = true;
     
-    // Validate client
-    if (!validateField('client', quotationData.client)) {
-      isValid = false;
+    if (Object.keys(errors).length > 0) {
+      showWarning('Please fix validation errors before saving', {
+        title: 'Validation Required',
+      });
+      setActiveTab(0);
+      return;
     }
     
-    // Validate items
-    quotationData.items.forEach((item, index) => {
-      if (!validateField('name', item.name, index)) isValid = false;
-      if (!validateField('length', item.length, index)) isValid = false;
-      if (!validateField('width', item.width, index)) isValid = false;
-      if (!validateField('quantity', item.quantity, index)) isValid = false;
-    });
-    
-    return isValid;
-  };
-
-  const handleAutoSave = () => {
-    console.log('Auto-saving draft:', quotationData);
-    setAutoSaveStatus('Saved ' + new Date().toLocaleTimeString());
-    setTimeout(() => setAutoSaveStatus(''), 3000);
+    try {
+      setLoadingState({
+        isLoading: true,
+        message: 'Creating quotation...',
+        progress: 0,
+      });
+      
+      const apiData = transformQuotationDataForAPI(quotationData);
+      
+      setLoadingState(prev => ({ ...prev, progress: 25 }));
+      
+      let result;
+      if (currentQuotationId) {
+        result = await quotationService.updateQuotation(currentQuotationId, apiData);
+        setLoadingState(prev => ({ ...prev, progress: 50 }));
+        
+        if (result.success) {
+          await quotationService.updateQuotationStatus(currentQuotationId, 'issued');
+          setLoadingState(prev => ({ ...prev, progress: 75 }));
+        }
+      } else {
+        result = await quotationService.createQuotation({ ...apiData, status: 'issued' });
+        setLoadingState(prev => ({ ...prev, progress: 75 }));
+      }
+      
+      if (result.success) {
+        setRetryCount(0);
+        
+        // Clear draft data since quotation is now saved
+        clearDraft();
+        
+        try {
+          setLoadingState(prev => ({ ...prev, message: 'Generating PDF...' }));
+          await quotationService.generateQuotationPDF(result.data.id);
+          setLoadingState(prev => ({ ...prev, progress: 100 }));
+          
+          showInfo('PDF generated successfully!');
+        } catch (pdfError) {
+          console.warn('PDF generation failed:', pdfError);
+          showWarning('Quotation created but PDF generation failed.');
+        }
+        
+        showSuccess('Quotation created and ready to send!', {
+          title: 'Success',
+        });
+        
+        setTimeout(() => {
+          navigate(`/quotations/${result.data.id}`);
+        }, 2000);
+      } else {
+        throw new Error(result.error || 'Failed to create quotation');
+      }
+    } catch (error) {
+      handleApiError(error, 'save and send', true);
+    } finally {
+      setLoadingState({ isLoading: false, message: '', progress: null });
+    }
   };
 
   const addNewItem = () => {
     const newItem = {
-      id: Date.now(),
-      name: '',
-      quantity: 1,
-      length: 0,
-      height: 0,
-      width: 0,
-      unit: 'ft',
-      cabinetType: 'base',
-      pricingMethod: 'linear-foot',
-      costingMethod: 'linear-foot',
-      standardDepth: 2,
-      useStandardDepth: true,
-      baseMaterial: null,
-      hardwareCost: 0,
-      labourHours: 0,
-      labourRate: 50,
-      components: [],
-      notes: '',
-      linearFeet: 0,
-      materialCost: 0,
-      totalCost: 0
+      ...defaultNewItem,
+      id: Date.now().toString()
     };
     
-    setQuotationData(prev => ({
+    updateQuotationData(prev => ({
       ...prev,
       items: [...prev.items, newItem]
     }));
@@ -272,92 +472,80 @@ const CreateQuotationPage = () => {
   };
 
   const removeItem = (itemId) => {
-    if (showDeleteConfirm === itemId) {
-      setQuotationData(prev => ({
-        ...prev,
-        items: prev.items.filter(item => item.id !== itemId)
-      }));
-      
-      setExpandedItems(prev => {
-        const newExpanded = { ...prev };
-        delete newExpanded[itemId];
-        return newExpanded;
-      });
-      
-      setShowDeleteConfirm(null);
-    } else {
-      setShowDeleteConfirm(itemId);
-      setTimeout(() => setShowDeleteConfirm(null), 5000);
-    }
-  };
-
-  const duplicateItem = (itemId) => {
-    const itemToDuplicate = quotationData.items.find(item => item.id === itemId);
-    if (itemToDuplicate) {
-      const duplicatedItem = {
-        ...itemToDuplicate,
-        id: Date.now(),
-        name: `${itemToDuplicate.name} (Copy)`
-      };
-      
-      setQuotationData(prev => ({
-        ...prev,
-        items: [...prev.items, duplicatedItem]
-      }));
-    }
+    updateQuotationData(prev => ({
+      ...prev,
+      items: prev.items.filter(item => item.id !== itemId)
+    }));
+    
+    setExpandedItems(prev => {
+      const newExpanded = { ...prev };
+      delete newExpanded[itemId];
+      return newExpanded;
+    });
+    
+    setShowDeleteConfirm(null);
   };
 
   const updateItem = (itemId, field, value) => {
-    setQuotationData(prev => ({
+    updateQuotationData(prev => ({
       ...prev,
       items: prev.items.map(item => 
         item.id === itemId ? { ...item, [field]: value } : item
       )
     }));
-  };
-
-  const addComponentToItem = (itemId) => {
-    const newComponent = {
-      id: Date.now(),
-      name: '',
-      quantity: 1,
-      length: 0,
-      width: 0,
-      height: 0,
-      material: null,
-      notes: ''
-    };
     
-    setQuotationData(prev => ({
+    // Clear validation error for this field
+    const errorKey = `item_${itemId}_${field}`;
+    if (validationErrors[errorKey]) {
+      setValidationErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[errorKey];
+        return newErrors;
+      });
+    }
+  };
+
+  const duplicateItem = (itemId) => {
+    updateQuotationData(prev => {
+      const itemToDuplicate = prev.items.find(item => item.id === itemId);
+      if (itemToDuplicate) {
+        const duplicatedItem = {
+          ...itemToDuplicate,
+          id: Date.now().toString(),
+          title: `${itemToDuplicate.title} (Copy)`
+        };
+        return {
+          ...prev,
+          items: [...prev.items, duplicatedItem]
+        };
+      }
+      return prev;
+    });
+  };
+
+  const addNewComponent = (itemId) => {
+    updateQuotationData(prev => ({
       ...prev,
       items: prev.items.map(item => 
         item.id === itemId 
-          ? { ...item, components: [...item.components, newComponent] }
+          ? { 
+              ...item, 
+              components: [...item.components, { ...defaultNewComponent, id: Date.now().toString() }] 
+            }
           : item
       )
     }));
   };
 
-  const removeComponentFromItem = (itemId, componentId) => {
-    setQuotationData(prev => ({
-      ...prev,
-      items: prev.items.map(item => 
-        item.id === itemId 
-          ? { ...item, components: item.components.filter(comp => comp.id !== componentId) }
-          : item
-      )
-    }));
-  };
-
-  const updateComponent = (itemId, componentId, field, value) => {
-    setQuotationData(prev => ({
+  const updateComponent = (itemId, componentId, updates) => {
+    updateQuotationData(prev => ({
       ...prev,
       items: prev.items.map(item => 
         item.id === itemId 
           ? {
               ...item,
               components: item.components.map(comp => 
-                comp.id === componentId ? { ...comp, [field]: value } : comp
+                comp.id === componentId ? { ...comp, ...updates } : comp
               )
             }
           : item
@@ -365,128 +553,36 @@ const CreateQuotationPage = () => {
     }));
   };
 
-  const calculateDisplayValue = (item) => {
-    const method = pricingMethods.find(m => m.value === item.costingMethod);
-    if (!method) return '';
-    
-    let value = 0;
-    switch (item.costingMethod) {
-      case 'area':
-        value = (item.length * item.width) / 1000000; // Convert mm² to m²
-        break;
-      case 'linear':
-        value = item.length / 1000; // Convert mm to m
-        break;
-      case 'volume':
-        value = (item.length * item.width * item.height) / 1000000000; // Convert mm³ to m³
-        break;
-      case 'per-unit':
-        value = item.quantity;
-        break;
-      default:
-        value = 0;
-    }
-    
-    return `${value.toFixed(2)} ${method.unit}`;
-  };
-
-  const calculateLinearFeet = (item) => {
-    if (item.pricingMethod === 'linear-foot') {
-      return item.length * item.quantity;
-    }
-    return 0;
-  };
-  
-  const updateCabinetType = (itemId, cabinetType) => {
-    const cabinet = cabinetTypes.find(c => c.value === cabinetType);
-    const standardDepth = cabinet ? cabinet.standardDepth : null;
-    
-    updateItem(itemId, 'cabinetType', cabinetType);
-    if (standardDepth) {
-      updateItem(itemId, 'standardDepth', standardDepth);
-      updateItem(itemId, 'width', standardDepth); // 自动设置宽度为标准深度
-    }
-  };
-  
-  const calculateItemCostBreakdown = (item) => {
-    let materialCost = 0;
-    let componentsCost = 0;
-    
-    if (item.pricingMethod === 'linear-foot') {
-      const linearFeet = calculateLinearFeet(item);
-      if (item.baseMaterial) {
-        // 假设材料成本按线性英尺计算
-        materialCost = linearFeet * item.baseMaterial.cost;
-      }
-    } else if (item.pricingMethod === 'per-piece') {
-      if (item.baseMaterial) {
-        materialCost = item.quantity * item.baseMaterial.cost;
-      }
-    }
-    
-    // 计算组件成本
-    item.components.forEach(component => {
-      if (component.pricingType === 'linear-foot') {
-        componentsCost += component.length * component.quantity * (component.material?.cost || 0);
-      } else {
-        componentsCost += component.quantity * (component.material?.cost || 0);
-      }
-    });
-    
-    const labourCost = item.labourHours * item.labourRate;
-    const totalCost = materialCost + componentsCost + item.hardwareCost + labourCost;
-    
-    return {
-      materialCost,
-      componentsCost,
-      labourCost,
-      hardwareCost: item.hardwareCost,
-      totalCost
+  const addComponentToItem = (itemId) => {
+    const newComponent = {
+      ...defaultNewComponent,
+      id: Date.now()
     };
+    
+    updateQuotationData(prev => ({
+      ...prev,
+      items: prev.items.map(item => 
+        item.id === itemId 
+          ? { ...item, components: [...(item.components || []), newComponent] }
+          : item
+      )
+    }));
   };
 
-  // Add the missing calculateItemCost function
-  const calculateItemCost = (item) => {
-    const breakdown = calculateItemCostBreakdown(item);
-    return breakdown.totalCost;
-  };
-
-  const calculateSubtotal = () => {
-    return quotationData.items.reduce((total, item) => {
-      const calc = realTimeCalculations[item.id] || calculateItemCostBreakdown(item);
-      return total + calc.totalCost;
-    }, 0);
-  };
-
-  const calculateMarkup = () => {
-    return calculateSubtotal() * (quotationData.markupPercentage / 100);
-  };
-
-  const calculateTax = () => {
-    return (calculateSubtotal() + calculateMarkup()) * (quotationData.taxRate / 100);
-  };
-
-  const calculateGrandTotal = () => {
-    return calculateSubtotal() + calculateMarkup() + calculateTax();
-  };
-
-  const handleSaveDraft = () => {
-    setIsLoading(true);
-    console.log('Saving draft:', quotationData);
-    setTimeout(() => setIsLoading(false), 1000);
+  const removeComponentFromItem = (itemId, componentId) => {
+    updateQuotationData(prev => ({
+      ...prev,
+      items: prev.items.map(item => 
+        item.id === itemId 
+          ? { ...item, components: (item.components || []).filter(comp => comp.id !== componentId) }
+          : item
+      )
+    }));
   };
 
   const handlePreviewPDF = () => {
-    console.log('Generating PDF preview');
-    // TODO: Generate PDF preview
-  };
-
-  const handleSaveAndSend = () => {
-    if (validateForm()) {
-      setIsLoading(true);
-      console.log('Saving and sending:', quotationData);
-      setTimeout(() => setIsLoading(false), 1000);
-    }
+    console.log('Generating PDF preview for quotation:', currentQuotationId);
+    // TODO: Implement PDF preview functionality
   };
 
   const toggleItemExpansion = (itemId) => {
@@ -496,97 +592,35 @@ const CreateQuotationPage = () => {
     }));
   };
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: quotationData.currency
-    }).format(amount || 0);
-  };
-
-  // Sidebar Summary Component
-  const SidebarSummary = () => (
-    <Paper 
-      elevation={3} 
-      sx={{ 
-        position: 'sticky', 
-        top: 120, 
-        p: 3, 
-        backgroundColor: 'grey.50',
-        border: '1px solid',
-        borderColor: 'divider'
-      }}
-    >
-      <Box display="flex" alignItems="center" gap={1} mb={2}>
-        <ReceiptIcon color="primary" />
-        <Typography variant="h6" fontWeight="bold">
-          Quote Summary
-        </Typography>
-      </Box>
-      
-      <Stack spacing={2}>
-        <Box>
-          <Typography variant="body2" color="text.secondary">
-            Items Count
-          </Typography>
-          <Typography variant="h6" fontWeight="bold">
-            {quotationData.items.length}
-          </Typography>
-        </Box>
-        
-        <Divider />
-        
-        <Box>
-          <Typography variant="body2" color="text.secondary">
-            Subtotal
-          </Typography>
-          <Typography variant="h6">
-            {formatCurrency(calculateSubtotal())}
-          </Typography>
-        </Box>
-        
-        <Box>
-          <Typography variant="body2" color="text.secondary">
-            Markup ({quotationData.markupPercentage}%)
-          </Typography>
-          <Typography variant="body1">
-            {formatCurrency(calculateMarkup())}
-          </Typography>
-        </Box>
-        
-        <Box>
-          <Typography variant="body2" color="text.secondary">
-            Tax ({quotationData.taxRate}%)
-          </Typography>
-          <Typography variant="body1">
-            {formatCurrency(calculateTax())}
-          </Typography>
-        </Box>
-        
-        <Divider />
-        
-        <Box>
-          <Typography variant="body2" color="text.secondary">
-            Grand Total
-          </Typography>
-          <Typography variant="h5" fontWeight="bold" color="primary">
-            {formatCurrency(calculateGrandTotal())}
-          </Typography>
-        </Box>
-        
-        {autoSaveStatus && (
-          <Fade in={!!autoSaveStatus}>
-            <Alert severity="success" size="small">
-              {autoSaveStatus}
-            </Alert>
-          </Fade>
-        )}
-      </Stack>
-    </Paper>
-  );
-
   return (
     <Container maxWidth="xl" sx={{ py: 3 }}>
-      {isLoading && <LinearProgress sx={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999 }} />}
+      <LoadingOverlay 
+        open={loadingState.isLoading}
+        message={loadingState.message}
+        progress={loadingState.progress}
+        variant={loadingState.progress !== null ? 'linear' : 'circular'}
+      />
+      
+      {/* Unsaved changes indicator */}
+      {isDirty && (
+        <Alert 
+          severity="info" 
+          sx={{ mb: 2 }}
+          action={
+            <Button 
+              color="inherit" 
+              size="small" 
+              onClick={handleSaveDraft}
+              disabled={loadingState.isLoading}
+            >
+              Save Draft
+            </Button>
+          }
+        >
+          You have unsaved changes. {autoSaveStatus && `(${autoSaveStatus})`}
+        </Alert>
+      )}
+      
       {/* Sticky Action Bar */}
       <Paper 
         elevation={2} 
@@ -610,13 +644,23 @@ const CreateQuotationPage = () => {
               >
                 Quotations
               </Link>
-              <Typography color="text.primary">Create New</Typography>
+              <Typography color="text.primary">
+                {currentQuotationId ? 'Edit' : 'Create New'}
+              </Typography>
             </Breadcrumbs>
             <Box display="flex" alignItems="center" gap={2}>
               <Typography variant="h5" fontWeight="bold">
                 {quotationData.title || 'New Quotation'}
               </Typography>
               <Chip label="Draft" color="default" size="small" />
+              {autoSaveStatus && (
+                <Chip 
+                  label={autoSaveStatus} 
+                  color={autoSaveStatus.includes('failed') ? 'error' : 'success'} 
+                  size="small" 
+                  variant="outlined"
+                />
+              )}
             </Box>
           </Box>
           
@@ -625,6 +669,7 @@ const CreateQuotationPage = () => {
               variant="outlined"
               startIcon={<ArrowBackIcon />}
               onClick={() => navigate('/quotations')}
+              disabled={loadingState.isLoading}
             >
               Cancel
             </Button>
@@ -632,744 +677,167 @@ const CreateQuotationPage = () => {
               variant="outlined"
               startIcon={<SaveIcon />}
               onClick={handleSaveDraft}
+              disabled={loadingState.isLoading}
             >
-              Save Draft
+              {loadingState.isLoading ? 'Saving...' : 'Save Draft'}
             </Button>
             <Button
               variant="outlined"
               startIcon={<PreviewIcon />}
               onClick={handlePreviewPDF}
+              disabled={!currentQuotationId || loadingState.isLoading}
             >
-              Preview PDF
+              Preview
             </Button>
             <Button
               variant="contained"
               startIcon={<SendIcon />}
               onClick={handleSaveAndSend}
+              disabled={!currentQuotationId || loadingState.isLoading}
+              sx={{ mr: 1 }}
             >
-              Save & Send
+              {loadingState.isLoading ? 'Saving...' : 'Save & Send'}
             </Button>
           </Box>
         </Box>
       </Paper>
 
       <Grid container spacing={3}>
-        {/* Left Column - Main Form */}
+        {/* Main Content */}
         <Grid item xs={12} lg={8}>
-          {/* Quotation Header */}
+          {/* Quote Information Section */}
           <Paper elevation={1} sx={{ p: 3, mb: 3 }}>
-            <Typography variant="h6" gutterBottom fontWeight="bold">
-              Quotation Details
-            </Typography>
-            
-            <Grid container spacing={3}>
-              {/* Row 1: Title and Client */}
-              <Grid item xs={12} md={6}>
-                <TextField
-                  fullWidth
-                  label="Quotation Title"
-                  value={quotationData.title}
-                  onChange={(e) => setQuotationData(prev => ({ ...prev, title: e.target.value }))}
-                  variant="outlined"
-                />
-              </Grid>
-              
-              <Grid item xs={12} md={6}>
-                <Autocomplete
-                  options={clients}
-                  getOptionLabel={(option) => option.name}
-                  value={quotationData.client}
-                  onChange={(event, newValue) => {
-                    setQuotationData(prev => ({ ...prev, client: newValue }));
-                  }}
-                  renderInput={(params) => (
-                    <TextField {...params} label="Client" variant="outlined" />
-                  )}
-                />
-              </Grid>
-              
-              {/* Row 2: Project Address */}
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  label="Project Address / Site"
-                  value={quotationData.projectAddress}
-                  onChange={(e) => setQuotationData(prev => ({ ...prev, projectAddress: e.target.value }))}
-                  variant="outlined"
-                  multiline
-                  rows={2}
-                />
-              </Grid>
-              
-              {/* Row 3: Date fields and Currency */}
-              <Grid item xs={12} md={3}>
-                <TextField
-                  fullWidth
-                  label="Date"
-                  type="date"
-                  value={quotationData.date}
-                  onChange={(e) => setQuotationData(prev => ({ ...prev, date: e.target.value }))}
-                  variant="outlined"
-                  InputLabelProps={{ shrink: true }}
-                />
-              </Grid>
-              
-              <Grid item xs={12} md={3}>
-                <TextField
-                  fullWidth
-                  label="Expiry Date"
-                  type="date"
-                  value={quotationData.expiryDate}
-                  onChange={(e) => setQuotationData(prev => ({ ...prev, expiryDate: e.target.value }))}
-                  variant="outlined"
-                  InputLabelProps={{ shrink: true }}
-                />
-              </Grid>
-              
-              <Grid item xs={12} md={3}>
-                <FormControl fullWidth variant="outlined">
-                  <InputLabel>Currency</InputLabel>
-                  <Select
-                    value={quotationData.currency}
-                    onChange={(e) => setQuotationData(prev => ({ ...prev, currency: e.target.value }))}
-                    label="Currency"
-                  >
-                    <MenuItem value="USD">USD</MenuItem>
-                    <MenuItem value="EUR">EUR</MenuItem>
-                    <MenuItem value="GBP">GBP</MenuItem>
-                    <MenuItem value="AUD">AUD</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-              
-              <Grid item xs={12} md={3}>
-                <TextField
-                  fullWidth
-                  label="Tax Rate (%)"
-                  type="number"
-                  value={quotationData.taxRate}
-                  onChange={(e) => setQuotationData(prev => ({ ...prev, taxRate: parseFloat(e.target.value) || 0 }))}
-                  variant="outlined"
-                  InputProps={{
-                    endAdornment: <InputAdornment position="end">%</InputAdornment>
-                  }}
-                />
-              </Grid>
-              
-              {/* Row 4: Salesperson */}
-              <Grid item xs={12} md={6}>
-                <TextField
-                  fullWidth
-                  label="Salesperson / Prepared by"
-                  value={quotationData.salesperson}
-                  onChange={(e) => setQuotationData(prev => ({ ...prev, salesperson: e.target.value }))}
-                  variant="outlined"
-                />
-              </Grid>
-              
-              {/* Row 5: Notes */}
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  label="Notes / Job Description"
-                  value={quotationData.notes}
-                  onChange={(e) => setQuotationData(prev => ({ ...prev, notes: e.target.value }))}
-                  variant="outlined"
-                  multiline
-                  rows={3}
-                />
-              </Grid>
-            </Grid>
-          </Paper>
-
-          {/* Items List */}
-          <Paper elevation={1} sx={{ p: 3, mb: 3 }}>
-            <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-              <Typography variant="h6" fontWeight="bold">
-                Items ({quotationData.items.length})
-              </Typography>
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={addNewItem}
-                size="small"
-              >
-                Add Item
-              </Button>
-            </Box>
-
-            {quotationData.items.length === 0 ? (
-              <Box 
-                display="flex" 
-                flexDirection="column" 
-                alignItems="center" 
-                py={4}
-                sx={{ backgroundColor: 'grey.50', borderRadius: 1 }}
-              >
-                <Typography variant="body1" color="text.secondary" gutterBottom>
-                  No items added yet
-                </Typography>
-                <Typography variant="body2" color="text.secondary" mb={2}>
-                  Start by adding your first cabinet or furniture item
-                </Typography>
-                <Button
-                  variant="contained"
-                  startIcon={<AddIcon />}
-                  onClick={addNewItem}
-                >
-                  Add First Item
-                </Button>
-              </Box>
-            ) : (
-              quotationData.items.map((item, index) => (
-                <Card key={item.id} sx={{ mb: 2, border: '1px solid', borderColor: 'divider' }}>
-                  <CardHeader
-                    title={
-                      <Box display="flex" alignItems="center" gap={2}>
-                        <Typography variant="subtitle1" fontWeight="bold">
-                          {item.name || `Item ${index + 1}`}
-                        </Typography>
-                        <Chip 
-                          label={formatCurrency(calculateItemCost(item))} 
-                          color="primary" 
-                          size="small" 
-                        />
-                      </Box>
-                    }
-                    action={
-                      <Box display="flex" gap={1}>
-                        <IconButton
-                          size="small"
-                          onClick={() => duplicateItem(item.id)}
-                          title="Duplicate Item"
-                        >
-                          <CopyIcon fontSize="small" />
-                        </IconButton>
-                        <IconButton
-                          size="small"
-                          onClick={() => removeItem(item.id)}
-                          title="Remove Item"
-                          color="error"
-                        >
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                        <IconButton
-                          size="small"
-                          onClick={() => toggleItemExpansion(item.id)}
-                        >
-                          {expandedItems[item.id] ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                        </IconButton>
-                      </Box>
-                    }
-                    sx={{ pb: 1 }}
-                  />
-                  
-                  <Collapse in={expandedItems[item.id]} timeout="auto" unmountOnExit>
-                    <CardContent sx={{ pt: 0 }}>
-                      <Grid container spacing={2}>
-                        {/* Item Basic Info */}
-                        <Grid item xs={12} md={4}>
-                          <TextField
-                            fullWidth
-                            label="Item Name"
-                            value={item.name}
-                            onChange={(e) => updateItem(item.id, 'name', e.target.value)}
-                            variant="outlined"
-                            size="small"
-                          />
-                        </Grid>
-                        
-                        <Grid item xs={12} md={2}>
-                          <TextField
-                            fullWidth
-                            label="Quantity"
-                            type="number"
-                            value={item.quantity}
-                            onChange={(e) => updateItem(item.id, 'quantity', parseInt(e.target.value) || 1)}
-                            variant="outlined"
-                            size="small"
-                          />
-                        </Grid>
-                        
-                        <Grid item xs={12} md={6}>
-                          <TextField
-                            fullWidth
-                            label="Location / Position"
-                            value={item.location}
-                            onChange={(e) => updateItem(item.id, 'location', e.target.value)}
-                            variant="outlined"
-                            size="small"
-                          />
-                        </Grid>
-                        
-                        {/* Measurements */}
-                        <Grid item xs={12}>
-                          <Typography variant="subtitle2" gutterBottom fontWeight="bold">
-                            Measurements
-                          </Typography>
-                          <Grid container spacing={2}>
-                            {/* Cabinet Type Selection */}
-                            <Grid item xs={12} md={3}>
-                              <FormControl fullWidth variant="outlined" size="small">
-                                <InputLabel>Cabinet Type</InputLabel>
-                                <Select
-                                  value={item.cabinetType}
-                                  onChange={(e) => updateCabinetType(item.id, e.target.value)}
-                                  label="Cabinet Type"
-                                >
-                                  {cabinetTypes.map(type => (
-                                    <MenuItem key={type.value} value={type.value}>
-                                      {type.label} {type.standardDepth && `(${type.standardDepth}ft depth)`}
-                                    </MenuItem>
-                                  ))}
-                                </Select>
-                              </FormControl>
-                            </Grid>
-                            
-                            {/* Primary Length */}
-                            <Grid item xs={12} md={3}>
-                              <TextField
-                                fullWidth
-                                variant="outlined"
-                                size="small"
-                                label="Length (Primary)"
-                                type="number"
-                                value={item.length}
-                                onChange={(e) => updateItem(item.id, 'length', parseFloat(e.target.value) || 0)}
-                                InputProps={{
-                                  endAdornment: <InputAdornment position="end">ft</InputAdornment>
-                                }}
-                                helperText="Primary charging dimension"
-                              />
-                            </Grid>
-                            
-                            {/* Height */}
-                            <Grid item xs={12} md={3}>
-                              <TextField
-                                fullWidth
-                                variant="outlined"
-                                size="small"
-                                label="Height"
-                                type="number"
-                                value={item.height}
-                                onChange={(e) => updateItem(item.id, 'height', parseFloat(e.target.value) || 0)}
-                                InputProps={{
-                                  endAdornment: <InputAdornment position="end">ft</InputAdornment>
-                                }}
-                              />
-                            </Grid>
-                            
-                            {/* Depth/Width based on cabinet type */}
-                            <Grid item xs={12} md={3}>
-                              <TextField
-                                fullWidth
-                                variant="outlined"
-                                size="small"
-                                label={item.useStandardDepth ? `Depth (Standard: ${item.standardDepth}ft)` : "Custom Depth"}
-                                type="number"
-                                value={item.useStandardDepth ? item.standardDepth : item.width}
-                                onChange={(e) => {
-                                  if (!item.useStandardDepth) {
-                                    updateItem(item.id, 'width', parseFloat(e.target.value) || 0);
-                                  }
-                                }}
-                                disabled={item.useStandardDepth}
-                                InputProps={{
-                                  endAdornment: <InputAdornment position="end">ft</InputAdornment>
-                                }}
-                                helperText={item.useStandardDepth ? "Using standard depth" : "Custom depth"}
-                              />
-                            </Grid>
-                            
-                            {/* Pricing Method */}
-                            <Grid item xs={12} md={6}>
-                              <FormControl fullWidth variant="outlined" size="small">
-                                <InputLabel>Pricing Method</InputLabel>
-                                <Select
-                                  value={item.pricingMethod}
-                                  onChange={(e) => updateItem(item.id, 'pricingMethod', e.target.value)}
-                                  label="Pricing Method"
-                                >
-                                  {pricingMethods.map(method => (
-                                    <MenuItem key={method.value} value={method.value}>
-                                      {method.label} {method.primary && '(Primary)'}
-                                    </MenuItem>
-                                  ))}
-                                </Select>
-                              </FormControl>
-                            </Grid>
-                            
-                            {/* Linear Feet Display */}
-                            {item.pricingMethod === 'linear-foot' && (
-                              <Grid item xs={12} md={6}>
-                                <TextField
-                                  fullWidth
-                                  variant="outlined"
-                                  size="small"
-                                  label="Linear Feet"
-                                  value={calculateLinearFeet(item).toFixed(2)}
-                                  disabled
-                                  InputProps={{
-                                    endAdornment: <InputAdornment position="end">lf</InputAdornment>
-                                  }}
-                                  helperText="Calculated: Length × Quantity"
-                                />
-                              </Grid>
-                            )}
-                          </Grid>
-                        </Grid>
-                        
-                        {/* Material & Costs */}
-                        <Grid item xs={12}>
-                          <Typography variant="subtitle2" gutterBottom fontWeight="bold">
-                            Material & Costs
-                          </Typography>
-                          <Grid container spacing={2}>
-                            <Grid item xs={12} md={4}>
-                              <Autocomplete
-                                options={materials}
-                                getOptionLabel={(option) => `${option.name} (${option.thickness}) - ${formatCurrency(option.cost)}/${option.unit}`}
-                                value={item.material}
-                                onChange={(event, newValue) => {
-                                  updateItem(item.id, 'material', newValue);
-                                }}
-                                renderInput={(params) => (
-                                  <TextField {...params} label="Base Material" variant="outlined" size="small" />
-                                )}
-                              />
-                            </Grid>
-                            
-                            <Grid item xs={12} md={2}>
-                              <TextField
-                                fullWidth
-                                label="Hardware Cost"
-                                type="number"
-                                value={item.hardware}
-                                onChange={(e) => updateItem(item.id, 'hardware', parseFloat(e.target.value) || 0)}
-                                variant="outlined"
-                                size="small"
-                                InputProps={{
-                                  startAdornment: <InputAdornment position="start">{quotationData.currency}</InputAdornment>
-                                }}
-                              />
-                            </Grid>
-                            
-                            <Grid item xs={12} md={2}>
-                              <TextField
-                                fullWidth
-                                label="Labour Hours"
-                                type="number"
-                                value={item.labourHours}
-                                onChange={(e) => updateItem(item.id, 'labourHours', parseFloat(e.target.value) || 0)}
-                                variant="outlined"
-                                size="small"
-                                InputProps={{
-                                  endAdornment: <InputAdornment position="end">hrs</InputAdornment>
-                                }}
-                              />
-                            </Grid>
-                            
-                            <Grid item xs={12} md={4}>
-                              <Box 
-                                sx={{ 
-                                  p: 2, 
-                                  backgroundColor: 'primary.50', 
-                                  borderRadius: 1, 
-                                  textAlign: 'center',
-                                  border: '1px solid',
-                                  borderColor: 'primary.200',
-                                  height: '100%',
-                                  display: 'flex',
-                                  flexDirection: 'column',
-                                  justifyContent: 'center'
-                                }}
-                              >
-                                <Typography variant="caption" color="text.secondary">
-                                  Item Total
-                                </Typography>
-                                <Typography variant="h6" color="primary.main" fontWeight="bold">
-                                  {formatCurrency(calculateItemCost(item))}
-                                </Typography>
-                              </Box>
-                            </Grid>
-                          </Grid>
-                        </Grid>
-                        
-                        {/* Components Section */}
-                        <Grid item xs={12}>
-                          <Divider sx={{ my: 2 }} />
-                          <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                            <Typography variant="subtitle2" fontWeight="bold">
-                              Components
-                            </Typography>
-                            <Button
-                              size="small"
-                              startIcon={<AddIcon />}
-                              onClick={() => addComponentToItem(item.id)}
-                            >
-                              Add Component
-                            </Button>
-                          </Box>
-                          
-                          {item.components.map((component, compIndex) => (
-                            <Box key={component.id} sx={{ mb: 2, p: 2, backgroundColor: 'grey.50', borderRadius: 1 }}>
-                              <Grid container spacing={2} alignItems="center">
-                                <Grid item xs={12} md={3}>
-                                  <TextField
-                                    fullWidth
-                                    label="Component Name"
-                                    value={component.name}
-                                    onChange={(e) => updateComponent(item.id, component.id, 'name', e.target.value)}
-                                    variant="outlined"
-                                    size="small"
-                                  />
-                                </Grid>
-                                
-                                <Grid item xs={6} md={1}>
-                                  <TextField
-                                    fullWidth
-                                    label="Qty"
-                                    type="number"
-                                    value={component.quantity}
-                                    onChange={(e) => updateComponent(item.id, component.id, 'quantity', parseInt(e.target.value) || 1)}
-                                    variant="outlined"
-                                    size="small"
-                                  />
-                                </Grid>
-                                
-                                <Grid item xs={6} md={1}>
-                                  <TextField
-                                    fullWidth
-                                    label="L"
-                                    type="number"
-                                    value={component.length}
-                                    onChange={(e) => updateComponent(item.id, component.id, 'length', parseFloat(e.target.value) || 0)}
-                                    variant="outlined"
-                                    size="small"
-                                  />
-                                </Grid>
-                                
-                                <Grid item xs={6} md={1}>
-                                  <TextField
-                                    fullWidth
-                                    label="W"
-                                    type="number"
-                                    value={component.width}
-                                    onChange={(e) => updateComponent(item.id, component.id, 'width', parseFloat(e.target.value) || 0)}
-                                    variant="outlined"
-                                    size="small"
-                                  />
-                                </Grid>
-                                
-                                <Grid item xs={6} md={1}>
-                                  <TextField
-                                    fullWidth
-                                    label="H"
-                                    type="number"
-                                    value={component.height}
-                                    onChange={(e) => updateComponent(item.id, component.id, 'height', parseFloat(e.target.value) || 0)}
-                                    variant="outlined"
-                                    size="small"
-                                  />
-                                </Grid>
-                                
-                                <Grid item xs={12} md={4}>
-                                  <Autocomplete
-                                    options={materials}
-                                    getOptionLabel={(option) => `${option.name} (${option.thickness})`}
-                                    value={component.material}
-                                    onChange={(event, newValue) => {
-                                      updateComponent(item.id, component.id, 'material', newValue);
-                                    }}
-                                    renderInput={(params) => (
-                                      <TextField {...params} label="Material" variant="outlined" size="small" />
-                                    )}
-                                  />
-                                </Grid>
-                                
-                                <Grid item xs={12} md={1}>
-                                  <IconButton
-                                    size="small"
-                                    onClick={() => removeComponentFromItem(item.id, component.id)}
-                                    color="error"
-                                  >
-                                    <DeleteIcon fontSize="small" />
-                                  </IconButton>
-                                </Grid>
-                              </Grid>
-                            </Box>
-                          ))}
-                        </Grid>
-                        
-                        {/* Notes */}
-                        <Grid item xs={12}>
-                          <TextField
-                            fullWidth
-                            label="Item Notes"
-                            value={item.notes}
-                            onChange={(e) => updateItem(item.id, 'notes', e.target.value)}
-                            variant="outlined"
-                            size="small"
-                            multiline
-                            rows={2}
-                          />
-                        </Grid>
-                      </Grid>
-                    </CardContent>
-                  </Collapse>
-                </Card>
-              ))
-            )}
-          </Paper>
-
-          {/* Summary Section */}
-          <Paper elevation={1} sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom fontWeight="bold">
-              Cost Summary
+            <Typography variant="h6" gutterBottom>
+              Quote Information
             </Typography>
             
             <Grid container spacing={2}>
               <Grid item xs={12} md={6}>
                 <TextField
                   fullWidth
-                  label="Markup Percentage"
-                  type="number"
-                  value={quotationData.markupPercentage}
-                  onChange={(e) => setQuotationData(prev => ({ ...prev, markupPercentage: parseFloat(e.target.value) || 0 }))}
-                  variant="outlined"
-                  InputProps={{
-                    endAdornment: <InputAdornment position="end">%</InputAdornment>
-                  }}
+                  label="Quote Title"
+                  value={quotationData.title}
+                  onChange={(e) => updateQuotationData(prev => ({ ...prev, title: e.target.value }))}
+                  error={hasFieldError(validationErrors, 'title')}
+                  helperText={getFieldError(validationErrors, 'title')}
                 />
               </Grid>
-              
               <Grid item xs={12} md={6}>
-                <Box sx={{ p: 2, backgroundColor: 'success.50', borderRadius: 1 }}>
-                  <Typography variant="h5" fontWeight="bold" color="success.main" textAlign="center">
-                    Grand Total: {formatCurrency(calculateGrandTotal())}
-                  </Typography>
-                </Box>
+                <TextField
+                  fullWidth
+                  label="Quote ID"
+                  value={quotationData.quoteId}
+                  onChange={(e) => updateQuotationData(prev => ({ ...prev, quoteId: e.target.value }))}
+                  // Removed duplicate fullWidth prop since it appears later in the code
+                  required
+                  error={hasFieldError(validationErrors, 'quoteId')}
+                  helperText={getFieldError(validationErrors, 'quoteId')}
+                />
               </Grid>
             </Grid>
           </Paper>
-        </Grid>
 
-        {/* Right Column - Floating Panel */}
-        <Grid item xs={12} lg={4}>
-          <Paper 
-            elevation={2} 
-            sx={{ 
-              position: 'sticky', 
-              top: 120, 
-              p: 2
-            }}
-          >
-            <Tabs value={activeTab} onChange={(e, newValue) => setActiveTab(newValue)} sx={{ mb: 2 }}>
-              <Tab label="Cost Summary" />
-              <Tab label="Materials" />
-              <Tab label="PDF Preview" />
-            </Tabs>
+          {/* Client Information Section */}
+          <Card sx={{ mb: 3 }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Client Information
+              </Typography>
+              <TextField
+                fullWidth
+                label="Client Name (Optional)"
+                value={quotationData.clientName || ''}
+                onChange={(e) => {
+                  const value = e.target.value.slice(0, 255); // Limit to 255 characters
+                  updateQuotationData(prev => ({ ...prev, clientName: value }));
+                }}
+                placeholder="Enter client name or company"
+                helperText="Optional field for client identification"
+              />
+            </CardContent>
+          </Card>
+          <Grid container spacing={2}>
+            <Grid item xs={12}>
+              <Autocomplete
+                options={clients}
+                getOptionLabel={(option) => option.name}
+                value={quotationData.client}
+                onChange={(event, newValue) => {
+                  updateQuotationData(prev => ({ ...prev, client: newValue }));
+                  validateField('client', newValue, null, setValidationErrors);
+                }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Select Client"
+                    error={hasFieldError(validationErrors, 'client')}
+                    helperText={getFieldError(validationErrors, 'client')}
+                  />
+                )}
+              />
+            </Grid>
+          </Grid>
+
+          {/* Items Section */}
+          <Paper elevation={1} sx={{ p: 3, mb: 3 }}>
+            <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+              <Typography variant="h6">
+                Quotation Items ({quotationData.items.length})
+              </Typography>
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={addNewItem}
+              >
+                Add Item
+              </Button>
+            </Box>
             
-            {/* Cost Summary Tab */}
-            {activeTab === 0 && (
-              <Box>
-                <Typography variant="h6" gutterBottom fontWeight="bold">
-                  Live Cost Breakdown
+            {quotationData.items.length === 0 ? (
+              <Box textAlign="center" py={4}>
+                <Typography color="text.secondary">
+                  No items added yet. Click "Add Item" to get started.
                 </Typography>
-                
-                <TableContainer>
-                  <Table size="small">
-                    <TableBody>
-                      <TableRow>
-                        <TableCell>Subtotal</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>
-                          {formatCurrency(calculateSubtotal())}
-                        </TableCell>
-                      </TableRow>
-                      <TableRow>
-                        <TableCell>Markup ({quotationData.markupPercentage}%)</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>
-                          {formatCurrency(calculateMarkup())}
-                        </TableCell>
-                      </TableRow>
-                      <TableRow>
-                        <TableCell>Tax ({quotationData.taxRate}%)</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>
-                          {formatCurrency(calculateTax())}
-                        </TableCell>
-                      </TableRow>
-                      <TableRow sx={{ backgroundColor: 'primary.50' }}>
-                        <TableCell sx={{ fontWeight: 'bold', fontSize: '1.1rem' }}>Grand Total</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: '1.2rem', color: 'primary.main' }}>
-                          {formatCurrency(calculateGrandTotal())}
-                        </TableCell>
-                      </TableRow>
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-                
-                <Divider sx={{ my: 2 }} />
-                
-                <Typography variant="subtitle2" gutterBottom fontWeight="bold">
-                  Items Breakdown
-                </Typography>
-                
+              </Box>
+            ) : (
+              <Stack spacing={2}>
                 {quotationData.items.map((item, index) => (
-                  <Box key={item.id} display="flex" justifyContent="space-between" py={0.5}>
-                    <Typography variant="body2" noWrap>
-                      {item.name || `Item ${index + 1}`} (×{item.quantity})
-                    </Typography>
-                    <Typography variant="body2" fontWeight="bold">
-                      {formatCurrency(calculateItemCost(item))}
-                    </Typography>
-                  </Box>
+                  <QuotationItemCard
+                    key={item.id}
+                    item={item}
+                    index={index}
+                    expanded={expandedItems[item.id]}
+                    onToggleExpansion={() => toggleItemExpansion(item.id)}
+                    onUpdate={(field, value) => updateItem(item.id, field, value)}
+                    onRemove={() => removeItem(item.id)}
+                    onDuplicate={() => duplicateItem(item.id)}
+                    onAddComponent={() => addComponentToItem(item.id)}
+                    onRemoveComponent={(componentId) => removeComponentFromItem(item.id, componentId)}
+                    onUpdateComponent={(componentId, updates) => updateComponent(item.id, componentId, updates)}
+                    validationErrors={validationErrors}
+                    materials={materials}
+                    components={components}
+                    showDeleteConfirm={showDeleteConfirm === item.id}
+                    formatCurrency={formatCurrency}
+                    calculateItemCost={calculateItemCost}
+                  />
                 ))}
-              </Box>
-            )}
-            
-            {/* Quick Materials Tab */}
-            {activeTab === 1 && (
-              <Box>
-                <Typography variant="h6" gutterBottom fontWeight="bold">
-                  Quick Material Pick
-                </Typography>
-                
-                {materials.map(material => (
-                  <Box key={material.id} sx={{ mb: 1, p: 1, backgroundColor: 'grey.50', borderRadius: 1 }}>
-                    <Typography variant="body2" fontWeight="bold">
-                      {material.name}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {material.thickness} - {formatCurrency(material.cost)}/{material.unit}
-                    </Typography>
-                  </Box>
-                ))}
-              </Box>
-            )}
-            
-            {/* PDF Preview Tab */}
-            {activeTab === 2 && (
-              <Box>
-                <Typography variant="h6" gutterBottom fontWeight="bold">
-                  PDF Preview
-                </Typography>
-                
-                <Alert severity="info" sx={{ mb: 2 }}>
-                  PDF preview will be available after saving the quotation.
-                </Alert>
-                
-                <Button
-                  fullWidth
-                  variant="outlined"
-                  startIcon={<PreviewIcon />}
-                  onClick={handlePreviewPDF}
-                  disabled={quotationData.items.length === 0}
-                >
-                  Generate Preview
-                </Button>
-              </Box>
+              </Stack>
             )}
           </Paper>
+        </Grid>
+
+        {/* Sidebar */}
+        <Grid item xs={12} lg={4}>
+          <SidebarSummary
+            quotationData={quotationData}
+            autoSaveStatus={autoSaveStatus}
+            formatCurrency={formatCurrency}
+            calculateSubtotal={() => calculateSubtotal(quotationData.items, realTimeCalculations)}
+            calculateMarkup={() => calculateMarkup(calculateSubtotal(quotationData.items, realTimeCalculations), quotationData.markupPercentage)}
+            calculateTax={() => calculateTax(calculateSubtotal(quotationData.items, realTimeCalculations) + calculateMarkup(calculateSubtotal(quotationData.items, realTimeCalculations), quotationData.markupPercentage), quotationData.taxRate)}
+            calculateGrandTotal={() => calculateGrandTotal(quotationData.items, quotationData.markupPercentage, quotationData.taxRate, realTimeCalculations)}
+          />
         </Grid>
       </Grid>
     </Container>

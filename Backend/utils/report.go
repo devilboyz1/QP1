@@ -10,7 +10,7 @@ type SalesReport struct {
 func GenerateSalesReport(quotations []models.Quotation) SalesReport {
 	var total float64
 	for _, q := range quotations {
-		total += q.TotalCost // Replace 'Amount' with the actual field name in models.Quotation
+		total += q.TotalCost.InexactFloat64() // Fix: Convert decimal to float64
 	}
 	return SalesReport{
 		TotalQuotations: len(quotations),

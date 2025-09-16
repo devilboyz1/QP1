@@ -11,6 +11,8 @@ import Layout from "./components/Layout";
 import { Box, Typography, CircularProgress } from '@mui/material';
 import QuotationsPage from "./pages/QuotationsPage";
 import CreateQuotationPage from "./pages/CreateQuotationPage";
+import { NotificationProvider } from './contexts/NotificationContext';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Create placeholder components for each route
 const Dashboard = () => <Box sx={{ p: 3 }}><Typography variant="h4">Dashboard</Typography></Box>;
@@ -100,96 +102,99 @@ function App() {
   
   return (
     <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <Router>
-        <Routes>
-          <Route path="/login" element={
-            isAuthenticated ? <Navigate to="/" /> : <LoginPage />
-          } />
-          <Route path="/register" element={
-            isAuthenticated ? <Navigate to="/" /> : <RegisterPage />
-          } />
-          
-          {/* Protected routes with Layout */}
-          <Route path="/" element={
-            isAuthenticated ? 
-              <Layout userName={userName}>
-                <HomePage userName={userName} />
-              </Layout> : 
-              <Navigate to="/login" />
-          } />
-          <Route path="/dashboard" element={
-            isAuthenticated ? 
-              <Layout userName={userName}>
-                <Dashboard />
-              </Layout> : 
-              <Navigate to="/login" />
-          } />
-          <Route path="/quotations" element={
-            isAuthenticated ? 
-              <Layout userName={userName}>
-                <QuotationsPage />
-              </Layout> : 
-              <Navigate to="/login" />
-          } />
-          <Route path="/quotations/new" element={
-            isAuthenticated ? 
-              <Layout userName={userName}>
-                <CreateQuotationPage />
-              </Layout> : 
-              <Navigate to="/login" />
-          } />
-          <Route path="/clients" element={
-            isAuthenticated ? 
-              <Layout userName={userName}>
-                <Clients />
-              </Layout> : 
-              <Navigate to="/login" />
-          } />
-          <Route path="/products" element={
-            isAuthenticated ? 
-              <Layout userName={userName}>
-                <Products />
-              </Layout> : 
-              <Navigate to="/login" />
-          } />
-          <Route path="/reports" element={
-            isAuthenticated ? 
-              <Layout userName={userName}>
-                <Reports />
-              </Layout> : 
-              <Navigate to="/login" />
-          } />
-          <Route path="/admin" element={
-            isAuthenticated ? 
-              <Layout userName={userName}>
-                <Admin />
-              </Layout> : 
-              <Navigate to="/login" />
-          } />
-          <Route path="/settings" element={
-            isAuthenticated ? 
-              <Layout userName={userName}>
-                <Settings />
-              </Layout> : 
-              <Navigate to="/login" />
-          } />
-          <Route path="/notifications" element={
-            isAuthenticated ? 
-              <Layout userName={userName}>
-                <Notifications />
-              </Layout> : 
-              <Navigate to="/login" />
-          } />
-          <Route path="/help" element={
-            isAuthenticated ? 
-              <Layout userName={userName}>
-                <Help />
-              </Layout> : 
-              <Navigate to="/login" />
-          } />
-        </Routes>
-      </Router>
+      <ErrorBoundary>
+        <NotificationProvider>
+          <Router>
+            <Routes>
+              <Route path="/login" element={
+                isAuthenticated ? <Navigate to="/" /> : <LoginPage />
+              } />
+              <Route path="/register" element={
+                isAuthenticated ? <Navigate to="/" /> : <RegisterPage />
+              } />
+              
+              {/* Protected routes with Layout */}
+              <Route path="/" element={
+                isAuthenticated ? 
+                  <Layout userName={userName}>
+                    <HomePage userName={userName} />
+                  </Layout> : 
+                  <Navigate to="/login" />
+              } />
+              <Route path="/dashboard" element={
+                isAuthenticated ? 
+                  <Layout userName={userName}>
+                    <Dashboard />
+                  </Layout> : 
+                  <Navigate to="/login" />
+              } />
+              <Route path="/quotations" element={
+                isAuthenticated ? 
+                  <Layout userName={userName}>
+                    <QuotationsPage />
+                  </Layout> : 
+                  <Navigate to="/login" />
+              } />
+              <Route path="/quotations/new" element={
+                isAuthenticated ? 
+                  <Layout userName={userName}>
+                    <CreateQuotationPage />
+                  </Layout> : 
+                  <Navigate to="/login" />
+              } />
+              <Route path="/clients" element={
+                isAuthenticated ? 
+                  <Layout userName={userName}>
+                    <Clients />
+                  </Layout> : 
+                  <Navigate to="/login" />
+              } />
+              <Route path="/products" element={
+                isAuthenticated ? 
+                  <Layout userName={userName}>
+                    <Products />
+                  </Layout> : 
+                  <Navigate to="/login" />
+              } />
+              <Route path="/reports" element={
+                isAuthenticated ? 
+                  <Layout userName={userName}>
+                    <Reports />
+                  </Layout> : 
+                  <Navigate to="/login" />
+              } />
+              <Route path="/admin" element={
+                isAuthenticated ? 
+                  <Layout userName={userName}>
+                    <Admin />
+                  </Layout> : 
+                  <Navigate to="/login" />
+              } />
+              <Route path="/settings" element={
+                isAuthenticated ? 
+                  <Layout userName={userName}>
+                    <Settings />
+                  </Layout> : 
+                  <Navigate to="/login" />
+              } />
+              <Route path="/notifications" element={
+                isAuthenticated ? 
+                  <Layout userName={userName}>
+                    <Notifications />
+                  </Layout> : 
+                  <Navigate to="/login" />
+              } />
+              <Route path="/help" element={
+                isAuthenticated ? 
+                  <Layout userName={userName}>
+                    <Help />
+                  </Layout> : 
+                  <Navigate to="/login" />
+              } />
+            </Routes>
+          </Router>
+        </NotificationProvider>
+      </ErrorBoundary>
     </ThemeProvider>
   );
 }

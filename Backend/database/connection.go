@@ -1,6 +1,7 @@
 package database
 
 import (
+	"fmt"
 	"qp1/models"
 
 	"gorm.io/driver/mysql"
@@ -25,6 +26,19 @@ func ConnectDB() (*gorm.DB, error) {
 
 	DB = db
 
-	db.AutoMigrate(&models.User{}, &models.Material{}, &models.Component{}, &models.ComponentMaterial{})
+	err = db.AutoMigrate(
+		&models.User{},
+		&models.Material{},
+		&models.Component{},
+		&models.ComponentMaterial{},
+		&models.Quotation{},
+		&models.QuotationItem{},
+		&models.QuotationMaterial{},
+	)
+	if err != nil {
+		fmt.Printf("Migration error: %v\n", err)
+		return nil, err
+	}
+	fmt.Println("Database migration completed successfully")
 	return db, nil
 }

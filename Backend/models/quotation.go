@@ -3,26 +3,27 @@ package models
 import (
 	"time"
 
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
 // Quotation represents a quotation with components and calculated costs
 type Quotation struct {
-	ID          uint           `gorm:"primaryKey;autoIncrement" json:"id"`
-	UserID      uint           `gorm:"not null" json:"user_id"`
-	Title       string         `gorm:"not null" json:"title"`
-	Description string         `gorm:"type:text" json:"description"`
-	TotalCost   float64        `gorm:"type:decimal(10,2);not null;default:0" json:"total_cost"`
-	Status      string         `gorm:"default:'draft'" json:"status"` // draft, issued, accepted, rejected
-	QuotationNo string         `gorm:"unique;not null" json:"quotation_no"`
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
-	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
+	ID          uint            `gorm:"primaryKey" json:"id"`
+	UserID      uint            `gorm:"not null;index" json:"user_id"`
+	ClientName  string          `gorm:"type:varchar(255)" json:"client_name,omitempty"`
+	Title       string          `gorm:"type:varchar(255);not null" json:"title"`
+	Description string          `gorm:"type:text" json:"description,omitempty"`
+	Status      string          `gorm:"type:varchar(50);default:'draft'" json:"status"`
+	TotalCost   decimal.Decimal `gorm:"type:decimal(15,2);default:0" json:"total_cost"`
+	QuotationNo string          `gorm:"type:varchar(100);uniqueIndex" json:"quotation_no"`
+	CreatedAt   time.Time       `json:"created_at"`
+	UpdatedAt   time.Time       `json:"updated_at"`
+	DeletedAt   gorm.DeletedAt  `gorm:"index" json:"-"`
 
-	// Relationships
-	User      User                `gorm:"foreignKey:UserID" json:"user"`
-	Items     []QuotationItem     `json:"items"`
-	Materials []QuotationMaterial `json:"materials"`
+	// Remove Client relationship
+	User  User            `gorm:"foreignKey:UserID" json:"user,omitempty"`
+	Items []QuotationItem `gorm:"foreignKey:QuotationID" json:"items,omitempty"`
 }
 
 // QuotationItem represents a component in a quotation with dimensions and quantities
