@@ -370,12 +370,6 @@ class QuotationService {
 
   validateQuotationData(quotationData) {
     const errors = [];
-    const quotationPayload = {
-      client_name: quotationData.clientName || '',
-      title: quotationData.title,
-      description: quotationData.description,
-      items: quotationData.items
-    };
     
     if (!quotationData.title?.trim()) {
       errors.push('Title is required');

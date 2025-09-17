@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -29,7 +29,10 @@ import {
   Divider,
   Grid,
   Card,
-  CardContent
+  CardContent,
+  Skeleton,
+  Pagination,
+  Stack
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -53,6 +56,8 @@ import {
   DateRange as DateRangeIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+import { quotationService } from '../services/quotationService';
+import { useNotification } from '../contexts/NotificationContext';
 
 const QuotationsPage = () => {
   const [quotations, setQuotations] = useState([]);
@@ -65,84 +70,83 @@ const QuotationsPage = () => {
   const [selectedQuotations, setSelectedQuotations] = useState([]);
   const [bulkMenuAnchor, setBulkMenuAnchor] = useState(null);
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastFetchTime, setLastFetchTime] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(5);
+  const [totalCount, setTotalCount] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [cache, setCache] = useState({ data: null, timestamp: null });
   const navigate = useNavigate();
+  const { showSuccess, showError, showWarning } = useNotification();
+  
+  const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
-  // Sample data with created_by field
-  const sampleQuotations = [
-    {
-      id: 1,
-      quotation_no: 'QT-2024-001',
-      title: 'Office Furniture Set',
-      description: 'Complete office furniture package for startup company',
-      total_cost: 15750.00,
-      status: 'draft',
-      created_at: '2024-01-15T10:30:00Z',
-      updated_at: '2024-01-15T10:30:00Z',
-      created_by: 'John Smith'
-    },
-    {
-      id: 2,
-      quotation_no: 'QT-2024-002',
-      title: 'Custom Kitchen Cabinets',
-      description: 'Bespoke kitchen cabinet solution with premium materials',
-      total_cost: 28500.00,
-      status: 'issued',
-      created_at: '2024-01-14T14:20:00Z',
-      updated_at: '2024-01-16T09:15:00Z',
-      created_by: 'Sarah Johnson'
-    },
-    {
-      id: 3,
-      quotation_no: 'QT-2024-003',
-      title: 'Conference Room Setup',
-      description: 'Complete conference room furniture and equipment',
-      total_cost: 12300.00,
-      status: 'accepted',
-      created_at: '2024-01-12T11:45:00Z',
-      updated_at: '2024-01-18T16:30:00Z',
-      created_by: 'Mike Davis'
-    },
-    {
-      id: 4,
-      quotation_no: 'QT-2024-004',
-      title: 'Retail Display Units',
-      description: 'Custom display units for retail store renovation',
-      total_cost: 8750.00,
-      status: 'rejected',
-      created_at: '2024-01-10T09:00:00Z',
-      updated_at: '2024-01-17T13:20:00Z',
-      created_by: 'Emily Wilson'
-    },
-    {
-      id: 5,
-      quotation_no: 'QT-2024-005',
-      title: 'Warehouse Shelving System',
-      description: 'Industrial shelving solution for warehouse optimization',
-      total_cost: 45200.00,
-      status: 'draft',
-      created_at: '2024-01-20T08:15:00Z',
-      updated_at: '2024-01-20T08:15:00Z',
-      created_by: 'John Smith'
+  // Check if cache is valid
+  const isCacheValid = useCallback(() => {
+    if (!cache.data || !cache.timestamp) return false;
+    return Date.now() - cache.timestamp < CACHE_DURATION;
+  }, [cache, CACHE_DURATION]);
+
+  // Debounced search function
+  const debounceSearch = useCallback((searchValue) => {
+    const timeoutId = setTimeout(() => {
+      setSearchTerm(searchValue);
+      setCurrentPage(1);
+    }, 300);
+    return () => clearTimeout(timeoutId);
+  }, []);
+
+  // Fetch quotations from API with caching
+  const fetchQuotations = useCallback(async (forceRefresh = false) => {
+    try {
+      // Use cache if valid and not forcing refresh
+      if (!forceRefresh && isCacheValid()) {
+        setQuotations(cache.data);
+        setTotalCount(cache.data.length);
+        setTotalPages(Math.ceil(cache.data.length / itemsPerPage));
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+      
+      const response = await quotationService.listQuotations();
+      
+      if (response.success) {
+        const quotationsData = response.data?.quotations || [];
+        setQuotations(quotationsData);
+        setTotalCount(response.data?.total || quotationsData.length);
+        setTotalPages(response.data?.total_pages || Math.ceil(quotationsData.length / itemsPerPage));
+        setLastFetchTime(new Date());
+        
+        // Update cache
+        setCache({
+          data: quotationsData,
+          timestamp: Date.now()
+        });
+        
+        if (forceRefresh) {
+          showSuccess('Quotations refreshed successfully');
+        }
+      } else {
+        throw new Error(response.error || 'Failed to fetch quotations');
+      }
+    } catch (err) {
+      const errorMessage = err.message || 'Failed to fetch quotations';
+      setError(errorMessage);
+      showError(errorMessage);
+      console.error('Error fetching quotations:', err);
+    } finally {
+      setLoading(false);
+      setIsRefreshing(false);
     }
-  ];
+  }, [isCacheValid, cache, itemsPerPage, showSuccess, showError]);
 
   useEffect(() => {
-    const fetchQuotations = async () => {
-      try {
-        setLoading(true);
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        setQuotations(sampleQuotations);
-        setError(null);
-      } catch (err) {
-        setError('Failed to fetch quotations');
-        console.error('Error fetching quotations:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchQuotations();
-  }, []);
+  }, [fetchQuotations]);
 
   // Filter and sort quotations
   useEffect(() => {
@@ -151,9 +155,10 @@ const QuotationsPage = () => {
     // Apply search filter
     if (searchTerm) {
       filtered = filtered.filter(q => 
-        q.quotation_no.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        q.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        q.description.toLowerCase().includes(searchTerm.toLowerCase())
+        (q.quotation_no && q.quotation_no.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (q.title && q.title.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (q.description && q.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (q.created_by && q.created_by.toLowerCase().includes(searchTerm.toLowerCase()))
       );
     }
 
@@ -186,8 +191,8 @@ const QuotationsPage = () => {
       let bValue = b[sortConfig.key];
 
       if (sortConfig.key === 'total_cost') {
-        aValue = parseFloat(aValue);
-        bValue = parseFloat(bValue);
+        aValue = parseFloat(aValue || 0);
+        bValue = parseFloat(bValue || 0);
       } else if (sortConfig.key === 'created_at') {
         aValue = new Date(aValue);
         bValue = new Date(bValue);
@@ -205,8 +210,17 @@ const QuotationsPage = () => {
       return 0;
     });
 
-    setFilteredQuotations(filtered);
-  }, [quotations, searchTerm, statusFilter, sortConfig, dateRange]);
+    // Update total count and pages based on filtered results
+    setTotalCount(filtered.length);
+    setTotalPages(Math.ceil(filtered.length / itemsPerPage));
+    
+    // Apply pagination to filtered results
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    const paginatedResults = filtered.slice(startIndex, endIndex);
+    
+    setFilteredQuotations(paginatedResults);
+  }, [quotations, searchTerm, statusFilter, sortConfig, dateRange, currentPage, itemsPerPage]);
 
   const handleSort = (key) => {
     setSortConfig(prev => ({
@@ -231,10 +245,34 @@ const QuotationsPage = () => {
     );
   };
 
-  const handleBulkDelete = () => {
-    setQuotations(prev => prev.filter(q => !selectedQuotations.includes(q.id)));
-    setSelectedQuotations([]);
-    setBulkMenuAnchor(null);
+  const handleBulkDelete = async () => {
+    try {
+      setLoading(true);
+      const deletePromises = selectedQuotations.map(id => 
+        quotationService.deleteQuotation(id)
+      );
+      
+      const results = await Promise.allSettled(deletePromises);
+      const successful = results.filter(r => r.status === 'fulfilled' && r.value.success).length;
+      const failed = results.length - successful;
+      
+      if (successful > 0) {
+        showSuccess(`Successfully deleted ${successful} quotation(s)`);
+        await fetchQuotations(true); // Force refresh
+      }
+      
+      if (failed > 0) {
+        showWarning(`Failed to delete ${failed} quotation(s)`);
+      }
+      
+      setSelectedQuotations([]);
+      setBulkMenuAnchor(null);
+    } catch (err) {
+      showError('Failed to delete quotations');
+      console.error('Bulk delete error:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleBulkExport = () => {
@@ -278,6 +316,7 @@ const QuotationsPage = () => {
   };
 
   const getInitials = (name) => {
+    if (!name || typeof name !== 'string') return '??';
     return name.split(' ').map(n => n[0]).join('').toUpperCase();
   };
 
@@ -293,13 +332,40 @@ const QuotationsPage = () => {
     navigate(`/quotations/edit/${quotationId}`);
   };
 
-  const handleDelete = (quotationId) => {
-    setQuotations(prev => prev.filter(q => q.id !== quotationId));
+  const handleDelete = async (quotationId) => {
+    try {
+      const response = await quotationService.deleteQuotation(quotationId);
+      
+      if (response.success) {
+        showSuccess('Quotation deleted successfully');
+        await fetchQuotations(true); // Force refresh
+      } else {
+        throw new Error(response.error || 'Failed to delete quotation');
+      }
+    } catch (err) {
+      const errorMessage = err.message || 'Failed to delete quotation';
+      showError(errorMessage);
+      console.error('Delete error:', err);
+    }
   };
 
   const handleDownload = (quotationId) => {
     console.log('Download quotation PDF:', quotationId);
   };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await fetchQuotations(true); // Force refresh
+  };
+
+  const handlePageChange = (event, page) => {
+    setCurrentPage(page);
+  };
+
+  const handleSearchChange = useCallback((event) => {
+    const value = event.target.value;
+    debounceSearch(value);
+  }, [debounceSearch]);
 
   const SortableTableCell = ({ children, sortKey, align = 'left', ...props }) => {
     const isActive = sortConfig.key === sortKey;
@@ -345,23 +411,54 @@ const QuotationsPage = () => {
     );
   };
 
-  if (loading) {
+  // Loading skeleton component
+  const LoadingSkeleton = () => (
+    <TableContainer component={Paper}>
+      <Table>
+        <TableHead>
+          <TableRow>
+            <TableCell><Skeleton width={20} /></TableCell>
+            <TableCell><Skeleton width={100} /></TableCell>
+            <TableCell><Skeleton width={200} /></TableCell>
+            <TableCell><Skeleton width={100} /></TableCell>
+            <TableCell><Skeleton width={80} /></TableCell>
+            <TableCell><Skeleton width={100} /></TableCell>
+            <TableCell><Skeleton width={100} /></TableCell>
+            <TableCell><Skeleton width={80} /></TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {[...Array(5)].map((_, index) => (
+            <TableRow key={index}>
+              <TableCell><Skeleton width={20} /></TableCell>
+              <TableCell><Skeleton width={100} /></TableCell>
+              <TableCell><Skeleton width={200} /></TableCell>
+              <TableCell><Skeleton width={100} /></TableCell>
+              <TableCell><Skeleton width={80} /></TableCell>
+              <TableCell><Skeleton width={100} /></TableCell>
+              <TableCell><Skeleton width={100} /></TableCell>
+              <TableCell><Skeleton width={80} /></TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </TableContainer>
+  );
+  
+  if (loading && quotations.length === 0) {
     return (
       <Container maxWidth="xl" sx={{ py: 4 }}>
-        <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-          <CircularProgress />
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="h4" component="h1" gutterBottom>
+            Quotations
+          </Typography>
         </Box>
+        <LoadingSkeleton />
       </Container>
     );
   }
 
-  if (error) {
-    return (
-      <Container maxWidth="xl" sx={{ py: 4 }}>
-        <Alert severity="error">{error}</Alert>
-      </Container>
-    );
-  }
+  // Remove the early return for error - handle it in the main render
 
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
@@ -370,30 +467,140 @@ const QuotationsPage = () => {
         <Typography variant="h4" component="h1" fontWeight="bold">
           Quotations
         </Typography>
-        <Button
-          variant="contained"
-          color="primary"
-          size="large"
-          startIcon={<AddIcon />}
-          onClick={handleNewQuotation}
-          sx={{
-            px: 3,
-            py: 1.5,
-            borderRadius: 2,
-            textTransform: 'none',
-            fontSize: '1.1rem',
-            fontWeight: 600,
-            boxShadow: 2,
-            '&:hover': {
-              boxShadow: 4,
-              transform: 'translateY(-1px)'
-            },
-            transition: 'all 0.2s ease-in-out'
-          }}
-        >
-          New Quotation
-        </Button>
+        <Box display="flex" gap={2}>
+          <Button
+            variant="outlined"
+            startIcon={isRefreshing ? <CircularProgress size={16} /> : <DateRangeIcon />}
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            sx={{
+              textTransform: 'none',
+              fontWeight: 600
+            }}
+          >
+            {isRefreshing ? 'Refreshing...' : 'Refresh'}
+          </Button>
+          <Button
+            variant="contained"
+            color="primary"
+            size="large"
+            startIcon={<AddIcon />}
+            onClick={handleNewQuotation}
+            sx={{
+              px: 3,
+              py: 1.5,
+              borderRadius: 2,
+              textTransform: 'none',
+              fontSize: '1.1rem',
+              fontWeight: 600,
+              boxShadow: 2,
+              '&:hover': {
+                boxShadow: 4,
+                transform: 'translateY(-1px)'
+              },
+              transition: 'all 0.2s ease-in-out'
+            }}
+          >
+            New Quotation
+          </Button>
+        </Box>
       </Box>
+
+      {/* Error Alert */}
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {error}
+        </Alert>
+      )}
+
+      {/* Stats Cards */}
+      <Grid container spacing={3} sx={{ mb: 3 }}>
+        <Grid item xs={12} sm={6} md={3}>
+          <Card>
+            <CardContent>
+              <Box display="flex" alignItems="center">
+                <BusinessIcon color="primary" sx={{ mr: 2 }} />
+                <Box>
+                  <Typography variant="h6">{totalCount}</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Total Quotations
+                  </Typography>
+                </Box>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <Card>
+            <CardContent>
+              <Box display="flex" alignItems="center">
+                <DraftIcon color="warning" sx={{ mr: 2 }} />
+                <Box>
+                  <Typography variant="h6">
+                    {filteredQuotations.filter(q => q.status === 'draft').length}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Draft
+                  </Typography>
+                </Box>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <Card>
+            <CardContent>
+              <Box display="flex" alignItems="center">
+                <CheckCircleIcon color="success" sx={{ mr: 2 }} />
+                <Box>
+                  <Typography variant="h6">
+                    {filteredQuotations.filter(q => q.status === 'accepted').length}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Accepted
+                  </Typography>
+                </Box>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <Card>
+            <CardContent>
+              <Box display="flex" alignItems="center">
+                <PersonIcon color="info" sx={{ mr: 2 }} />
+                <Box>
+                  <Typography variant="h6">
+                    {formatCurrency(
+                      filteredQuotations.reduce((sum, q) => sum + q.total_cost, 0)
+                    )}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Total Value
+                  </Typography>
+                </Box>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      {/* Performance indicator */}
+      {lastFetchTime && (
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="caption" color="text.secondary">
+            Last updated: {new Date(lastFetchTime).toLocaleTimeString()}
+            {isRefreshing && (
+              <Chip 
+                label="Refreshing..." 
+                size="small" 
+                color="primary" 
+                sx={{ ml: 1 }} 
+              />
+            )}
+          </Typography>
+        </Box>
+      )}
 
       {/* Filters and Search */}
       <Card sx={{ mb: 3, p: 2 }}>
@@ -403,7 +610,7 @@ const QuotationsPage = () => {
               fullWidth
               placeholder="Search quotations..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={handleSearchChange}
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
@@ -533,7 +740,15 @@ const QuotationsPage = () => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {filteredQuotations.map((quotation, index) => (
+            {error ? (
+              <TableRow>
+                <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
+                  <Typography variant="body1" color="text.secondary">
+                    Failed to load quotations. Please try refreshing the page.
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            ) : filteredQuotations.map((quotation, index) => (
               <TableRow 
                 key={quotation.id}
                 sx={{ 
@@ -684,12 +899,33 @@ const QuotationsPage = () => {
                 </TableCell>
               </TableRow>
             ))}
+          
           </TableBody>
         </Table>
       </TableContainer>
 
+      {/* Pagination */}
+      {!error && totalPages > 1 && (
+        <Box display="flex" justifyContent="center" mt={3}>
+          <Stack spacing={2}>
+            <Pagination
+              count={totalPages}
+              page={currentPage}
+              onChange={handlePageChange}
+              color="primary"
+              size="large"
+              showFirstButton
+              showLastButton
+            />
+            <Typography variant="body2" color="text.secondary" textAlign="center">
+              Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, totalCount)} of {totalCount} quotations
+            </Typography>
+          </Stack>
+        </Box>
+      )}
+
       {/* Empty State */}
-      {filteredQuotations.length === 0 && !loading && (
+      {!error && filteredQuotations.length === 0 && !loading && (
         <Box 
           display="flex" 
           flexDirection="column" 

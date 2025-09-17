@@ -50,7 +50,7 @@ export const validateField = (field, value, itemIndex = null, validationErrors =
       }
       break;
     case 'phone':
-      if (value && !/^[\+]?[1-9][\d]{0,15}$/.test(value.replace(/[\s\-\(\)]/g, ''))) {
+      if (value && !/^[+]?[1-9][\d]{0,15}$/.test(value.replace(/[\s\-()]/g, ''))) {
         errors[fieldKey] = 'Please enter a valid phone number';
       } else {
         delete errors[fieldKey];

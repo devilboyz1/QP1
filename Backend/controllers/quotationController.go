@@ -4,7 +4,6 @@ import (
 	"qp1/database"
 	"qp1/models"
 	"qp1/utils"
-	
 
 	"fmt"
 	"strconv"
@@ -89,6 +88,7 @@ func CreateQuotation(c *fiber.Ctx) error {
 	// Create quotation
 	quotation := models.Quotation{
 		UserID:      userID,
+		CreatedBy:   userData.Name,
 		Title:       req.Title,
 		Description: req.Description,
 		ClientName:  utils.SanitizeClientName(req.ClientName),
@@ -207,8 +207,7 @@ func validateCreateQuotationRequest(req CreateQuotationRequest) []ValidationErro
 	if len(req.Items) == 0 {
 		errors = append(errors, ValidationError{Field: "items", Message: "At least one item is required"})
 	}
-	
-	
+
 	// Validate client name
 	if len(req.ClientName) > 100 {
 		errors = append(errors, ValidationError{Field: "client_name", Message: "Client name must be less than 100 characters"})
@@ -319,6 +318,9 @@ func processQuotationItems(tx *gorm.DB, quotationID uint, items []CreateQuotatio
 }
 
 func createNewDraft(c *fiber.Ctx, req CreateQuotationRequest, userID uint) error {
+	// Get user data for CreatedBy field
+	userData := c.Locals("user").(models.User)
+
 	tx := database.DB.Begin()
 	defer func() {
 		if r := recover(); r != nil {
@@ -337,6 +339,7 @@ func createNewDraft(c *fiber.Ctx, req CreateQuotationRequest, userID uint) error
 
 	quotation := models.Quotation{
 		UserID:      userID,
+		CreatedBy:   userData.Name,
 		Title:       req.Title,
 		Description: req.Description,
 		ClientName:  utils.SanitizeClientName(req.ClientName),
@@ -472,7 +475,8 @@ func updateExistingDraft(c *fiber.Ctx, quotationID string, req CreateQuotationRe
 
 func UpdateQuotation(c *fiber.Ctx) error {
 	id := c.Params("id")
-	userID := c.Locals("user_id").(uint)
+	user := c.Locals("user").(models.User)
+	userID := user.ID
 
 	// Validate quotation ID
 	quotationID, err := strconv.ParseUint(id, 10, 32)
@@ -640,7 +644,8 @@ func GetQuotation(c *fiber.Ctx) error {
 
 // ListQuotations retrieves all quotations for the current user with pagination
 func ListQuotations(c *fiber.Ctx) error {
-	userID := c.Locals("user_id").(uint)
+	user := c.Locals("user").(models.User)
+	userID := user.ID
 
 	// Parse pagination parameters
 	page, _ := strconv.Atoi(c.Query("page", "1"))
@@ -862,7 +867,8 @@ func UpdateQuotationStatus(c *fiber.Ctx) error {
 
 // DuplicateQuotation creates a copy of an existing quotation
 func DuplicateQuotation(c *fiber.Ctx) error {
-	userID := c.Locals("user_id").(uint)
+	userData := c.Locals("user").(models.User)
+	userID := uint(userData.ID)
 	quotationID := c.Params("id")
 
 	// Validate quotation ID
@@ -912,6 +918,7 @@ func DuplicateQuotation(c *fiber.Ctx) error {
 	// Create new quotation
 	newQuotation := models.Quotation{
 		UserID:      userID,
+		CreatedBy:   userData.Name,
 		Title:       originalQuotation.Title + " (Copy)",
 		Description: originalQuotation.Description,
 		ClientName:  originalQuotation.ClientName,
@@ -954,7 +961,7 @@ func DuplicateQuotation(c *fiber.Ctx) error {
 	if err := database.DB.Where("quotation_id = ?", originalQuotation.ID).Find(&materials).Error; err != nil {
 		tx.Rollback()
 		return c.Status(fiber.StatusInternalServerError).JSON(APIResponse{
-			Success: false, 
+			Success: false,
 			Message: "Failed to fetch quotation materials",
 		})
 	}

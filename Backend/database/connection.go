@@ -15,7 +15,7 @@ var DB *gorm.DB
 // Connect to MySQL database
 func ConnectDB() (*gorm.DB, error) {
 	// Database configuration
-	dsn := "root:1234@tcp(localhost:3306)/qp1"
+	dsn := "root:1234@tcp(localhost:3306)/qp1?charset=utf8mb4&parseTime=True&loc=Local"
 	// dsn := "user:password@tcp(localhost:3306)/dbname?charset=utf8mb4&parseTime=True&loc=Local"
 
 	// Connect to MySQL database

@@ -11,6 +11,7 @@ import (
 type Quotation struct {
 	ID          uint            `gorm:"primaryKey" json:"id"`
 	UserID      uint            `gorm:"not null;index" json:"user_id"`
+	CreatedBy   string          `gorm:"type:varchar(255)" json:"created_by"`
 	ClientName  string          `gorm:"type:varchar(255)" json:"client_name,omitempty"`
 	Title       string          `gorm:"type:varchar(255);not null" json:"title"`
 	Description string          `gorm:"type:text" json:"description,omitempty"`
@@ -22,8 +23,9 @@ type Quotation struct {
 	DeletedAt   gorm.DeletedAt  `gorm:"index" json:"-"`
 
 	// Remove Client relationship
-	User  User            `gorm:"foreignKey:UserID" json:"user,omitempty"`
-	Items []QuotationItem `gorm:"foreignKey:QuotationID" json:"items,omitempty"`
+	User      User               `gorm:"foreignKey:UserID" json:"user,omitempty"`
+	Items     []QuotationItem    `gorm:"foreignKey:QuotationID" json:"items,omitempty"`
+	Materials []QuotationMaterial `gorm:"foreignKey:QuotationID" json:"materials,omitempty"` 
 }
 
 // QuotationItem represents a component in a quotation with dimensions and quantities
